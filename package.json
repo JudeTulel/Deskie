@@ -1,0 +1,17 @@
+{
+  "name": "kpl",
+  "version": "1.0.0",
+  "main": "index.js",
+  "workspaces":["apps/*","packages/*"],
+  
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+    "desktop":"npm run dev --workspace=apps/desktop",
+    "mobile":"npm run  start --workspace=apps/mpbile",
+    "build:desktop":"npm run build --workspace=apps/desktop"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
