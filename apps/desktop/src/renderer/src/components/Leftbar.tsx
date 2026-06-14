@@ -31,7 +31,7 @@ const Leftbar = () => {
 
   return (
     <div 
-      className="fixed left-0 top-0 h-full z-20"
+      className="fixed left-0 top-0 h-full z-50"
       onMouseEnter={() => setIsCollapsed(false)}
       onMouseLeave={() => setIsCollapsed(true)}
     >

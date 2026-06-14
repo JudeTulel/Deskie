@@ -16,7 +16,7 @@ body {
     background-color: #000000;
     scroll-behavior: smooth;
     overflow-x: hidden;
-  background-image: url('./wavy-lines.svg');
+
   background-size: cover;
   user-select: none;
 }
@@ -38,6 +38,39 @@ body {
   #hero {
   @apply relative z-10 min-h-dvh w-full px-5 sm:px-10 pb-20 container mx-auto ;
 }
+#about {
+        @apply min-h-screen 2xl:px-0 px-5 pl-36 container mx-auto;
+
+        
+
+        .badge {
+            @apply inline-block rounded-full bg-white text-black px-4 py-2 text-sm font-medium mb-8;
+        }
+
+        .top-grid {
+            @apply grid grid-cols-3 xl:grid-cols-3 gap-5 mb-5 md:px-0 px-5;
+
+            > div {
+                @apply rounded-3xl overflow-hidden h-64 relative;
+            }
+
+            img {
+                @apply object-cover w-full h-full;
+            }
+        }
+
+        .bottom-grid {
+            @apply grid grid-cols-1 md:grid-cols-12 gap-5 md:px-0 px-5;
+
+            > div {
+                @apply rounded-3xl overflow-hidden h-72 w-36 relative;
+            }
+
+            img {
+                @apply object-cover w-full h-full;
+            }
+        }
+    }
 }
 
 code {
