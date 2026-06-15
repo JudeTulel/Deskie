@@ -7,6 +7,8 @@
   --color-dblue: #0f2c5c;
   --color-lblue: #8798ba;
   --color-gray: #c8d1e1;
+  --color-purple: #9E97FF;
+  --color-sblue: #4CBFFF;
 
 }
 
@@ -37,6 +39,9 @@ body {
   }
   #hero {
   @apply relative z-10 min-h-dvh w-full px-5 sm:px-10 pb-20 container mx-auto ;
+  h1 {
+    @apply text-8xl md:text-[6vw] leading-none text-center font-semibold tracking-tight;
+  }
 }
 #about {
         @apply min-h-screen 2xl:px-0 px-5 pl-36 container mx-auto;

@@ -1,20 +1,25 @@
 import { useRef, useState, useEffect } from 'react'
-import { ScrollTrigger } from 'gsap/all'
+import { ScrollTrigger, ScrambleTextPlugin } from 'gsap/all'
 import { Hero } from './components/Hero'
 import gsap from 'gsap'
 import '../src/assets/main.css'
 import Leftbar from './components/Leftbar'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route,Navigate } from 'react-router-dom'
 import Desk from './components/Desk'
 import Library from './components/Library'
 import Settings from './components/Settings'
 import SoftAurora from './components/SoftAurora'
 import { ChatComponent } from './components/ChatComponent'
+import Onboard from './components/Onboard'
 
-gsap.registerPlugin(ScrollTrigger)
+gsap.registerPlugin(ScrollTrigger,ScrambleTextPlugin)
 
 function App(): React.JSX.Element {
   const [chatOpen, setChatOpen] = useState(false)
+
+  const isknown = false // TODO: replace with actual check for known user (e.g. from electron-store or localStorage);
+  // Show onboarding when user is not known
+  if (!isknown) return <Onboard />
 
   return (
     <Router>
@@ -106,7 +111,7 @@ function PersistentChat({
       <button
         onClick={() => toggle(!chatOpen)}
         aria-label={chatOpen ? 'Close Deskmate' : 'Open Deskmate'}
-        className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors text-sm font-medium shadow-lg"
+        className="fixed top-8 right-60 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors text-sm font-medium shadow-lg"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
           <line

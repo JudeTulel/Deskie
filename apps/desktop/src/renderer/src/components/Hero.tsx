@@ -1,8 +1,24 @@
 import rec1 from "../assets/images/rec1.png"
 import rec2 from "../assets/images/rec2.png"
 import rec3 from "../assets/images/rec3.png"
+import gsap from "gsap"
 
 export function Hero() {
+   gsap.to(".title", {
+      duration: 2.5,
+      scrambleText: {
+        text: "smarter",
+        chars: "***",
+        revealDelay: 0.2,
+        tweenLength: true,
+        speed: 0.1,
+        newClass: "text-gradient",
+      },
+      ease: "power2.inOut",
+      overwrite: "auto",
+      repeat: -1,
+      repeatDelay: 3,
+    });
   return (
     <section id="hero" className="relative z-10 min-h-screen w-full">
       {/* Centered container */}
@@ -19,7 +35,7 @@ export function Hero() {
               <img src={rec2} alt="rec2" />
               <img src={rec3} alt="rec3" />
             </div>
-            <h1 className='text-8xl md:text-[6vw] leading-none text-center font-semibold tracking-tight'>
+            <h1 className='title'>
               smarter.
             </h1>
           </div>

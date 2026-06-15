@@ -11,36 +11,36 @@ const Desk = () => {
   ]
 
   return (
-    <div className="min-h-screen p-8 pl-36">
-      <div className=" mx-auto">
+    <div className="min-h-screen p-8 pl-36 z-1 ">
+      <div className=" mx-auto  ">
         <h1 className="text-3xl font-bold text-white pb-10">Desk</h1>
 
         {/* Responsive Bento Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 auto-rows-auto gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 auto-rows-auto gap-4 ">
           {/* Card 1 - Analytics */}
-          <div className="bg-[#120F17] border border-[#2F293A] rounded-2xl p-5 aspect-[4/3] min-h-[200px] flex flex-col justify-between">
+          <div className="bg-lblue hover:bg-sblue border border-[#2F293A] rounded-2xl p-5 aspect-[4/3] min-h-[200px] flex flex-col justify-between">
             <div>
-              <span className="text-sm font-medium text-gray-400">Insights</span>
+              <span className="text-sm font-medium text-black">Check In</span>
             </div>
             <div>
-              <h3 className="text-white text-lg font-semibold mb-1">Analytics</h3>
-              <p className="text-gray-400 text-sm">Track user behavior</p>
+              <h3 className="text-white text-lg font-semibold mb-1">Learn</h3>
+              <p className="text-black text-sm">Today's focus card</p>
             </div>
           </div>
 
           {/* Card 2 - Dashboard */}
-          <div className="bg-[#120F17] border border-[#2F293A] rounded-2xl p-5 aspect-[4/3] min-h-[200px] flex flex-col justify-between">
+          <div className="bg-blue hover:bg-dblue border border-[#2F293A] rounded-2xl p-5 aspect-[4/3] min-h-[200px] flex flex-col justify-between">
             <div>
-              <span className="text-sm font-medium text-gray-400">Overview</span>
+              <span className="text-sm font-medium text-gray-400">Quick</span>
             </div>
             <div>
-              <h3 className="text-white text-lg font-semibold mb-1">Dashboard</h3>
-              <p className="text-gray-400 text-sm">Centralized data view</p>
+              <h3 className="text-white text-lg font-semibold mb-1">Quiz</h3>
+              <p className="text-gray-400 text-sm">Weak areas</p>
             </div>
           </div>
 
           {/* Card 3 - Collaboration (spans 2 cols & 2 rows, height reduced) */}
-          <div className="bg-[#120F17] border border-[#2F293A] rounded-2xl p-5 flex flex-col justify-between lg:col-span-2 lg:row-span-2">
+          <div className=" bg-white/5 border border-[#2F293A] rounded-2xl p-5 flex flex-col justify-between lg:col-span-2 lg:row-span-2">
             <div>
               <span className="text-sm font-medium text-gray-400">Teamwork</span>
             </div>
@@ -51,13 +51,13 @@ const Desk = () => {
           </div>
 
           {/* Card 4 - Automation (spans 2 cols, height reduced) */}
-          <div className="bg-white border border-[#2F293A] rounded-2xl p-5 flex flex-col justify-between lg:col-span-2">
+          <div className=" bg-white border border-[#2F293A] rounded-2xl p-5 flex flex-col justify-between lg:col-span-2">
             <div>
-              <span className="text-sm font-medium text-black">Efficiency</span>
+              <span className="text-sm font-medium text-black">Insight</span>
             </div>
             <div>
-              <h3 className="text-black text-lg font-semibold mb-1">Automation</h3>
-              <p className="text-lblue text-sm">Streamline workflows</p>
+              <h3 className="text-black text-lg font-semibold mb-1">Analytics</h3>
+              <p className="text-lblue text-sm">Progress tracking</p>
             </div>
           </div>
         </div>
