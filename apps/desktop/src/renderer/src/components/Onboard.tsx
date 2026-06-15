@@ -160,22 +160,36 @@ function StepAge({
     transition-colors
   `
   return (
-    <StepShell
-      icon={hat}
-      title="A little bit about you"
-      subtitle="Helps Deskie pitch explanations at the right level."
+<StepShell
+  icon={hat}
+  title="A little bit about you"
+  subtitle="Helps Deskie pitch explanations at the right level."
+>
+  <div className="flex gap-3 w-full max-w-sm">
+    <select
+      value={age}
+      onChange={e => onAge(e.target.value)}
+      className="flex-1 rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white [&_option]:bg-slate-800 [&_option]:text-white"
     >
-      <div className="flex gap-3 w-full max-w-sm">
-        <select value={age} onChange={e => onAge(e.target.value)} className={selectCls}>
-          <option value="" disabled>Age range…</option>
-          {AGE_RANGES.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-        <select value={level} onChange={e => onLevel(e.target.value)} className={selectCls}>
-          <option value="" disabled>Education…</option>
-          {EDU_LEVELS.map(l => <option key={l} value={l}>{l}</option>)}
-        </select>
-      </div>
-    </StepShell>
+      <option value="" disabled className="bg-slate-800 text-white">Age range…</option>
+      {AGE_RANGES.map(a => (
+        <option key={a} value={a} className="bg-slate-800 text-white">{a}</option>
+      ))}
+    </select>
+
+    <select
+      value={level}
+      onChange={e => onLevel(e.target.value)}
+      className="flex-1 rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-white [&_option]:bg-slate-800 [&_option]:text-white"
+    >
+      <option value="" disabled className="bg-slate-800 text-white">Education…</option>
+      {EDU_LEVELS.map(l => (
+        <option key={l} value={l} className="bg-slate-800 text-white">{l}</option>
+      ))}
+    </select>
+  </div>
+</StepShell>
+
   )
 }
 
