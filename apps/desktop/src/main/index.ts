@@ -9,20 +9,54 @@ import {
   completion,
   ocr,
   OCR_LATIN_RECOGNIZER_1,
+  EMBEDDINGGEMMA_300M_Q4_0,
   downloadAsset,
   cancel,
-  getModelInfo
+  getModelInfo,
+  ragIngest,
+  ragSearch,
+  transcribe
 } from '@qvac/sdk'
+import mammoth from 'mammoth'
+import { PDFParse } from 'pdf-parse'
 import { getActiveModel, getModels, initModelStore, setActiveModel, upsertModel } from './model-store'
-import type { ModelInput } from '../shared/models'
+import {
+  getUserDetails,
+  saveUserDetails,
+  getChats,
+  getChatMessages,
+  saveChatMessage,
+  createChatSession,
+  deleteChatSession,
+  getSubjects,
+  saveSubject,
+  deleteSubject,
+  getDocuments,
+  saveDocument,
+  deleteDocument,
+  getFlashcards,
+  saveFlashcard,
+  deleteFlashcard,
+  getQuizzes,
+  saveQuiz,
+  getActivities,
+  saveActivity
+} from '../../lib/db'
+import type { ModelInput, StoredModel } from '../shared/models'
 
 app.commandLine.appendSwitch('no-sandbox')
 
 let win: BrowserWindow | null = null
+
+// ── LLM model state (for completions) ─────────────────────────────────────────
 let modelId: string | null = null
 let loadModelPromise: Promise<string> | null = null
 let modelClientCount = 0
 let loadedModelSrc: string | null = null
+
+// ── Embedding model state (for RAG ingest/search) ─────────────────────────────
+let embeddingModelId: string | null = null
+let loadEmbeddingPromise: Promise<string> | null = null
 
 async function getCachedModelPath(modelSrc: string): Promise<string | undefined> {
   try {
@@ -34,9 +68,122 @@ async function getCachedModelPath(modelSrc: string): Promise<string | undefined>
   }
 }
 
+async function extractTextFromFile(filePath: string): Promise<string> {
+  const ext = path.extname(filePath).toLowerCase()
+  if (ext === '.txt' || ext === '.md' || ext === '.json' || ext === '.html' || ext === '.xml') {
+    return await fs.promises.readFile(filePath, 'utf8')
+  } else if (ext === '.docx') {
+    const result = await mammoth.extractRawText({ path: filePath })
+    return result.value
+  } else if (ext === '.pdf') {
+    const dataBuffer = await fs.promises.readFile(filePath)
+    const parser = new PDFParse({ data: dataBuffer })
+    const result = await parser.getText()
+    await parser.destroy()
+    return result.text
+  } else {
+    throw new Error(`Unsupported file type for text extraction: ${ext}`)
+  }
+}
+
+// Ensures the LLM (completion) model is loaded, reusing any in-flight promise
+async function ensureLLMLoaded(modelSrc: string): Promise<string> {
+  if (modelId && loadedModelSrc === modelSrc) {
+    return modelId
+  }
+
+  if (modelId && loadedModelSrc !== modelSrc) {
+    console.log('[LLM] Different model requested, unloading previous.')
+    await unloadModel({ modelId })
+    modelId = null
+    loadedModelSrc = null
+  }
+
+  if (loadModelPromise) {
+    console.log('[LLM] Load already in progress, waiting...')
+    return await loadModelPromise
+  }
+
+  console.log('[LLM] Loading model:', modelSrc)
+  loadModelPromise = loadModel({
+    modelSrc,
+    modelType: 'llamacpp-completion'
+  })
+    .then((id) => {
+      modelId = id
+      loadedModelSrc = modelSrc
+      return id
+    })
+    .finally(() => {
+      loadModelPromise = null
+    })
+
+  return await loadModelPromise
+}
+
+// Ensures the embedding model is loaded, reusing any in-flight promise
+async function ensureEmbeddingLoaded(): Promise<string> {
+  if (embeddingModelId) {
+    return embeddingModelId
+  }
+
+  if (loadEmbeddingPromise) {
+    console.log('[EMBED] Load already in progress, waiting...')
+    return await loadEmbeddingPromise
+  }
+
+  console.log('[EMBED] Loading embedding model:', EMBEDDINGGEMMA_300M_Q4_0)
+  loadEmbeddingPromise = loadModel({
+    modelSrc: EMBEDDINGGEMMA_300M_Q4_0,
+  })
+    .then((id) => {
+      embeddingModelId = id
+      return id
+    })
+    .finally(() => {
+      loadEmbeddingPromise = null
+    })
+
+  return await loadEmbeddingPromise
+}
+
+async function runOCRInternal(imagePath: string): Promise<{ text: string; bbox?: any; confidence?: number }[]> {
+  console.log(`[OCR] Loading OCR model: ${OCR_LATIN_RECOGNIZER_1}`)
+  const ocrModelId = await loadModel({
+    modelSrc: OCR_LATIN_RECOGNIZER_1,
+    modelConfig: {
+      langList: ['en'],
+      useGPU: true,
+      timeout: 30000,
+      magRatio: 1.5,
+      defaultRotationAngles: [90, 180, 270],
+      contrastRetry: false,
+      lowConfidenceThreshold: 0.5,
+      recognizerBatchSize: 1
+    }
+  })
+
+  try {
+    console.log(`[OCR] Running OCR on: ${imagePath}`)
+    const { blocks } = ocr({
+      modelId: ocrModelId,
+      image: imagePath,
+      options: { paragraph: false }
+    })
+    const result = await blocks
+    console.log(`[OCR] OCR finished. Extracted ${result.length} blocks.`)
+    return result
+  } catch (error) {
+    console.error('[OCR] Error during OCR processing:', error)
+    throw error
+  } finally {
+    console.log('[OCR] Unloading OCR model...')
+    await unloadModel({ modelId: ocrModelId })
+  }
+}
+
 function createWindow(): void {
   win = new BrowserWindow({
-
     height: 670,
     show: false,
     webPreferences: {
@@ -56,10 +203,237 @@ function createWindow(): void {
 }
 
 function setupHandlers(): void {
+  // ── Native File Picker ────────────────────────────────────────────────────
+  ipcMain.handle('select-files', async (_event, filters?: { name: string; extensions: string[] }[]) => {
+    if (!win) return []
+    const defaultFilters = filters || [
+      { name: 'Documents', extensions: ['pdf', 'docx', 'txt', 'md', 'json', 'html', 'xml'] },
+      { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'bmp'] },
+      { name: 'Audio', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'flac'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+    const result = await dialog.showOpenDialog(win, {
+      properties: ['openFile', 'multiSelections'],
+      filters: defaultFilters
+    })
+    if (result.canceled) return []
+    return result.filePaths
+  })
+
   ipcMain.handle('get-model-state', async () => ({
     models: getModels(),
     activeModel: getActiveModel()
   }))
+
+  ipcMain.handle('get-user-details', async () => {
+    return getUserDetails()
+  })
+
+  ipcMain.handle('save-user-details', async (_event, details) => {
+    return saveUserDetails(details)
+  })
+
+  ipcMain.handle('get-chats', async () => {
+    return getChats()
+  })
+
+  ipcMain.handle('get-chat-messages', async (_event, chatId: string) => {
+    return getChatMessages(chatId)
+  })
+
+  ipcMain.handle('create-chat-session', async (_event, chatId: string, title: string) => {
+    return createChatSession(chatId, title)
+  })
+
+  ipcMain.handle('save-chat-message', async (_event, msg) => {
+    return saveChatMessage(msg)
+  })
+
+  ipcMain.handle('delete-chat-session', async (_event, chatId: string) => {
+    deleteChatSession(chatId)
+    return { success: true }
+  })
+
+  // ── Subjects Handlers ──────────────────────────────────────────────────────
+  ipcMain.handle('get-subjects', async () => {
+    return getSubjects()
+  })
+
+  ipcMain.handle('save-subject', async (_event, sub) => {
+    return saveSubject(sub)
+  })
+
+  ipcMain.handle('delete-subject', async (_event, id: string) => {
+    deleteSubject(id)
+    return { success: true }
+  })
+
+  // ── Documents Handlers ─────────────────────────────────────────────────────
+  ipcMain.handle('get-documents', async () => {
+    return getDocuments()
+  })
+
+  ipcMain.handle('save-document', async (_event, doc) => {
+    return saveDocument(doc)
+  })
+
+  ipcMain.handle('delete-document', async (_event, id: string) => {
+    deleteDocument(id)
+    return { success: true }
+  })
+
+  // ── Flashcards Handlers ────────────────────────────────────────────────────
+  ipcMain.handle('get-flashcards', async () => {
+    return getFlashcards()
+  })
+
+  ipcMain.handle('save-flashcard', async (_event, card) => {
+    return saveFlashcard(card)
+  })
+
+  ipcMain.handle('delete-flashcard', async (_event, id: string) => {
+    deleteFlashcard(id)
+    return { success: true }
+  })
+
+  // ── Quizzes Handlers ───────────────────────────────────────────────────────
+  ipcMain.handle('get-quizzes', async () => {
+    return getQuizzes()
+  })
+
+  ipcMain.handle('save-quiz', async (_event, quiz) => {
+    return saveQuiz(quiz)
+  })
+
+  // ── Activities Handlers ────────────────────────────────────────────────────
+  ipcMain.handle('get-activities', async () => {
+    return getActivities()
+  })
+
+  ipcMain.handle('save-activity', async (_event, act) => {
+    return saveActivity(act)
+  })
+
+  // ── QVAC SDK RAG Ingestion Handler ─────────────────────────────────────────
+  ipcMain.handle('rag-ingest', async (_event, { filePath, text, subjectId, docName }) => {
+    const activeModel = getActiveModel()
+    const modelSrc = activeModel?.localPath ?? activeModel?.assetId ?? activeModel?.assetSrc
+    if (!modelSrc) throw new Error('No active model selected. Please select a model in Settings.')
+
+    // Ensure both models are ready in parallel
+    const [, embedId] = await Promise.all([
+      ensureLLMLoaded(modelSrc),
+      ensureEmbeddingLoaded()
+    ])
+
+    let docText = text || ''
+    let name = docName || 'Untitled Document'
+    let fileType = 'txt'
+
+    if (filePath) {
+      name = path.basename(filePath)
+      const ext = path.extname(filePath).toLowerCase().replace('.', '')
+      fileType = ['jpeg', 'jpg', 'png', 'bmp'].includes(ext) ? 'image' : ext
+
+      if (fileType === 'image') {
+        const ocrResults = await runOCRInternal(filePath)
+        docText = ocrResults.map(b => b.text).join('\n')
+      } else {
+        docText = await extractTextFromFile(filePath)
+      }
+    }
+
+    if (!docText.trim()) {
+      throw new Error('No text could be extracted from this file.')
+    }
+
+    const workspaceName = subjectId || 'default-workspace'
+    console.log(`[RAG] Ingesting "${name}" into workspace "${workspaceName}" (${docText.length} chars)`)
+
+    // ragIngest uses the embedding model, not the LLM
+    const ingestResult = await ragIngest({
+      modelId: embedId,
+      documents: [docText],
+      workspace: workspaceName,
+      chunkOpts: {
+        chunkSize: 256,
+        chunkOverlap: 50
+      }
+    })
+
+    const chunkCount = ingestResult.processed?.length || 1
+
+    const docId = 'doc-' + Math.random().toString(36).substring(2, 11)
+    const newDoc = saveDocument({
+      id: docId,
+      name,
+      path: filePath ?? undefined,
+      type: fileType,
+      ingestDate: Date.now(),
+      chunkCount,
+      subjectId
+    })
+
+    saveActivity({ action: `Ingested document "${name}" into subject.` })
+
+    return { success: true, document: newDoc }
+  })
+
+  // ── QVAC SDK RAG Search Handler ────────────────────────────────────────────
+  ipcMain.handle('rag-search', async (_event, { query, subjectId, topK = 5 }) => {
+    const activeModel = getActiveModel()
+    const modelSrc = activeModel?.localPath ?? activeModel?.assetId ?? activeModel?.assetSrc
+    if (!modelSrc) throw new Error('No active model selected.')
+
+    // Ensure both models are ready in parallel
+    const [, embedId] = await Promise.all([
+      ensureLLMLoaded(modelSrc),
+      ensureEmbeddingLoaded()
+    ])
+
+    const workspaceName = subjectId || 'default-workspace'
+    console.log(`[RAG] Searching workspace "${workspaceName}" for "${query}"`)
+
+    // ragSearch also uses the embedding model to vectorise the query
+    const results = await ragSearch({
+      modelId: embedId,
+      query,
+      topK,
+      workspace: workspaceName
+    })
+
+    return results
+  })
+
+  // ── QVAC SDK Audio Transcription Handler ───────────────────────────────────
+  ipcMain.handle('transcribe-audio', async (_event, { filePath, subjectId: _subjectId }) => {
+    const models = getModels()
+    const whisperModel: StoredModel | undefined =
+      models.find(m => m.type === 'Speech' && m.isActive) ||
+      models.find(m => m.type === 'Speech')
+
+    const src = whisperModel?.localPath ?? whisperModel?.assetId ?? whisperModel?.assetSrc ??
+      'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin'
+
+    console.log(`[Whisper] Loading speech model: ${src}`)
+    const whisperModelId = await loadModel({
+      modelSrc: src,
+      modelType: 'whisper'
+    })
+
+    try {
+      console.log(`[Whisper] Transcribing: ${filePath}`)
+      const text = await transcribe({
+        modelId: whisperModelId,
+        audioChunk: filePath
+      })
+      saveActivity({ action: `Transcribed audio and generated text.` })
+      return { text }
+    } finally {
+      console.log('[Whisper] Unloading speech model...')
+      await unloadModel({ modelId: whisperModelId })
+    }
+  })
 
   ipcMain.handle('save-model', async (_event, input: ModelInput) => {
     upsertModel(input)
@@ -95,41 +469,8 @@ function setupHandlers(): void {
     modelClientCount += 1
     const activeModel = getActiveModel()
     const src = modelSrc ?? activeModel?.localPath ?? activeModel?.assetId ?? activeModel?.assetSrc
-
-    if (!src) {
-      throw new Error('No active model selected.')
-    }
-
-    if (modelId && loadedModelSrc === src) {
-      console.log('[LLM] Model already loaded, skipping load.')
-      return 'model loaded'
-    }
-
-    if (modelId && loadedModelSrc !== src) {
-      await unloadModel({ modelId })
-      modelId = null
-      loadedModelSrc = null
-    }
-
-    if (!loadModelPromise) {
-      loadModelPromise = loadModel({
-        modelSrc: src,
-        modelType: 'llm',
-        onProgress: (progress) => console.log(progress)
-      })
-        .then((loadedModelId) => {
-          modelId = loadedModelId
-          loadedModelSrc = src
-          return loadedModelId
-        })
-        .finally(() => {
-          loadModelPromise = null
-        })
-    } else {
-      console.log('[LLM] Model load already in progress, waiting for it.')
-    }
-
-    await loadModelPromise
+    if (!src) throw new Error('No active model selected.')
+    await ensureLLMLoaded(src)
     return 'model loaded'
   })
 
@@ -156,7 +497,7 @@ function setupHandlers(): void {
     }
 
     if (!modelId) {
-      console.log('[LLM] Model already unloaded, skipping unload.')
+      console.log('[LLM] Model already unloaded.')
       return 'model unloaded'
     }
 
@@ -187,9 +528,7 @@ function setupHandlers(): void {
       const { blocks } = ocr({
         modelId: ocrModelId,
         image: imagePath,
-        options: {
-          paragraph: false
-        }
+        options: { paragraph: false }
       })
       const result = await blocks
       console.log(`[OCR] OCR finished. Extracted ${result.length} blocks.`)
@@ -211,9 +550,7 @@ function setupHandlers(): void {
       filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'bmp'] }]
     })
 
-    if (result.canceled || result.filePaths.length === 0) {
-      return null
-    }
+    if (result.canceled || result.filePaths.length === 0) return null
 
     const filePath = result.filePaths[0]
     try {
@@ -228,8 +565,8 @@ function setupHandlers(): void {
     }
   })
 
-  // ── Model Download ──────────────────────────────────────────────────────
-  const activeDownloads = new Map<string, string>() // downloadId → requestId
+  // ── Model Download ──────────────────────────────────────────────────────────
+  const activeDownloads = new Map<string, string>()
 
   ipcMain.handle('download-model', async (_event, assetSrc: string, downloadId: string) => {
     console.log(`[DOWNLOAD] Starting download: ${assetSrc}`)
@@ -288,6 +625,13 @@ app.whenReady().then(() => {
   })
   createWindow()
   setupHandlers()
+
+  // Pre-download & warm up the embedding model in the background
+  // so it's ready before the user tries to ingest anything
+  console.log('[EMBED] Pre-loading embedding model on startup...')
+  ensureEmbeddingLoaded()
+    .then(() => console.log('[EMBED] Embedding model ready.'))
+    .catch((err) => console.warn('[EMBED] Background embedding preload failed:', err))
 })
 
 app.on('window-all-closed', () => {

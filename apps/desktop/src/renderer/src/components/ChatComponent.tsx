@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useModelStore } from '../stores/modelStore'
+import { useChatStore } from '../stores/chatStore'
+import book from '../assets/images/book.png'
 
 type Message = {
   role: 'user' | 'assistant'
@@ -21,29 +23,76 @@ export function ChatComponent({ className = '', maxHeight = '400px', onMessageSe
   const [processing, setProcessing] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const [attachedImage, setAttachedImage] = useState<{ path: string; previewUrl: string } | null>(null)
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrText, setOcrText] = useState<string | null>(null)
-  const { activeModel, hydrate } = useModelStore()
+  
+  const { activeModel, hydrate: hydrateModels } = useModelStore()
+  const {
+    chats,
+    activeChatId,
+    chatMessages,
+    loadChats,
+    loadChatMessages,
+    saveMessage,
+    deleteChat
+  } = useChatStore()
+
+  const assistantResponseRef = useRef('')
 
   useEffect(() => {
     window.qvacAPI.onCompletionStream((token) => {
       if (token === '') {
         setProcessing(false)
         onMessageSent?.('')
+        
+        // Save the finished assistant message to SQLite DB
+        const currentChatId = useChatStore.getState().activeChatId || ''
+        const assistantMsgId = 'msg-' + Math.random().toString(36).substring(2, 11)
+        saveMessage({
+          id: assistantMsgId,
+          chatId: currentChatId,
+          role: 'assistant',
+          content: assistantResponseRef.current
+        })
       } else {
+        assistantResponseRef.current += token
         setMessages(prev => {
           const updated = [...prev]
-          updated[updated.length - 1].content += token
+          if (updated.length > 0) {
+            updated[updated.length - 1].content += token
+          }
           return updated
         })
       }
     })
 
-    hydrate()
+    hydrateModels()
+    loadChats()
   }, [])
+
+  // Start a new chat if none is active
+  useEffect(() => {
+    if (!activeChatId) {
+      const newChatId = 'req-' + Math.random().toString(36).substring(2, 11)
+      useChatStore.setState({ activeChatId: newChatId, chatMessages: [] })
+    }
+  }, [activeChatId])
+
+  // Sync messages from store chatMessages
+  useEffect(() => {
+    setMessages(
+      chatMessages.map((m) => ({
+        role: m.role,
+        content: m.content,
+        attachedImageUrl: m.attachedImageUrl,
+        ocrText: m.ocrText
+      }))
+    )
+  }, [chatMessages])
 
   useEffect(() => {
     let cancelled = false
@@ -74,9 +123,6 @@ export function ChatComponent({ className = '', maxHeight = '400px', onMessageSe
       const selected = await window.qvacAPI.selectImage()
       if (!selected) return
 
-      console.log('[OCR] Selected file path (loading image):', selected.path)
-      console.log('[OCR] Created preview URL:', selected.previewUrl.substring(0, 100) + '...')
-      
       setAttachedImage({ path: selected.path, previewUrl: selected.previewUrl })
       setOcrLoading(true)
       setOcrText(null)
@@ -115,22 +161,37 @@ export function ChatComponent({ className = '', maxHeight = '400px', onMessageSe
       ocrText: ocrText || undefined
     }
 
-    const nextHistory: Message[] = [
-      ...messages,
-      userMessage
-    ]
+    const currentChatId = activeChatId || 'req-' + Math.random().toString(36).substring(2, 11)
+    if (!activeChatId) {
+      useChatStore.setState({ activeChatId: currentChatId })
+    }
 
-    setMessages([...nextHistory, { role: 'assistant', content: '' }])
+    const userMsgId = 'msg-' + Math.random().toString(36).substring(2, 11)
+    saveMessage({
+      id: userMsgId,
+      chatId: currentChatId,
+      role: 'user',
+      content: input,
+      attachedImageUrl: attachedImage?.previewUrl || undefined,
+      ocrText: ocrText || undefined
+    })
 
-    // Convert nextHistory to format required by LLM, prepending OCR text context to user message
+    assistantResponseRef.current = ''
+    setMessages(prev => [...prev, userMessage, { role: 'assistant', content: '' }])
+
+    // Convert history for LLM, prepending OCR text context to user message
     const formattedHistory = [
       { role: 'system', content: 'You are a helpful assistant.' },
-      ...nextHistory.map(msg => ({
+      ...messages.map(msg => ({
         role: msg.role,
-        content: msg.role === 'user' && msg.ocrText
-          ? `[Attached Image OCR Text: "${msg.ocrText}"]\n\n${msg.content}`
-          : msg.content
-      }))
+        content: msg.content
+      })),
+      {
+        role: 'user',
+        content: ocrText
+          ? `[Attached Image OCR Text: "${ocrText}"]\n\n${input}`
+          : input
+      }
     ]
 
     window.qvacAPI.infer(formattedHistory)
@@ -142,15 +203,83 @@ export function ChatComponent({ className = '', maxHeight = '400px', onMessageSe
   }
 
   return (
-    <div className={`flex flex-col ${className}`}>
+    <div className={`flex flex-col relative ${className}`}>
       {/* Chat Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-zinc-800 rounded-t-lg">
-        <h2 className="text-sm font-semibold">Deskmate AI</h2>
-        <span className="flex items-center gap-1.5 text-xs text-zinc-400">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-zinc-800 rounded-t-lg relative z-30">
+        <div className="flex items-center gap-2">
+          {/* History Icon (Placeholder from assets folder) */}
+          <img
+            src={book}
+            onClick={() => setShowHistory(!showHistory)}
+            className="w-4 h-4 cursor-pointer opacity-75 hover:opacity-100 hover:scale-105 transition-all brightness-0 invert"
+            alt="Chat History"
+            title="Chat History"
+          />
+          <h2 className="text-xs font-semibold">Deskmate AI</h2>
+        </div>
+        <span className="flex items-center gap-1.5 text-[10px] text-zinc-400">
           <span className={`w-1.5 h-1.5 rounded-full ${loading ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
           {loading ? 'Loading...' : activeModel?.name ?? 'Local AI Ready'}
         </span>
       </div>
+
+      {/* History Slide-down Overlay */}
+      {showHistory && (
+        <div className="absolute top-[38px] left-0 right-0 z-20 bg-zinc-800 border-b border-zinc-700 max-h-60 overflow-y-auto p-3 flex flex-col gap-2 shadow-lg animate-fadeIn">
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-700/60">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Previous Chats</span>
+            <button
+              onClick={() => {
+                const newChatId = 'req-' + Math.random().toString(36).substring(2, 11)
+                useChatStore.setState({ activeChatId: newChatId, chatMessages: [] })
+                setShowHistory(false)
+              }}
+              className="text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors px-2 py-0.5 rounded bg-indigo-500/10 hover:bg-indigo-500/20"
+            >
+              + New Chat
+            </button>
+          </div>
+          {chats.length === 0 ? (
+            <div className="text-center text-zinc-500 text-xs py-4 font-mono">No previous chats.</div>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {chats.map((chat) => (
+                <div
+                  key={chat.id}
+                  onClick={() => {
+                    loadChatMessages(chat.id)
+                    setShowHistory(false)
+                  }}
+                  className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer transition-colors group/item ${
+                    activeChatId === chat.id
+                      ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
+                      : 'bg-zinc-900/40 text-zinc-300 hover:bg-zinc-700/50'
+                  }`}
+                >
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className="font-medium truncate">{chat.title}</p>
+                    <p className="text-[9px] text-zinc-500 mt-0.5">
+                      {new Date(chat.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteChat(chat.id)
+                    }}
+                    className="p-1 text-zinc-500 hover:text-red-400 transition-colors opacity-0 group-hover/item:opacity-100"
+                    title="Delete Chat"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Messages Container */}
       <div 

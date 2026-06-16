@@ -1,23 +1,61 @@
 import { useRef, useState, useEffect } from 'react'
 import { ScrollTrigger } from 'gsap/all'
-import { Hero } from './components/Hero'
 import gsap from 'gsap'
 import '../src/assets/main.css'
 import Leftbar from './components/Leftbar'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import Desk from './components/Desk'
-import Library from './components/Library'
+import { HashRouter as Router, Routes, Route, useLocation } from 'react-router-dom'
+import Dashboard from './components/Dashboard'
+import LibraryView from './components/LibraryView'
+import DeepDive from './components/DeepDive'
+import IngestionView from './components/IngestionView'
+import TranscriptionView from './components/TranscriptionView'
+import AIChatView from './components/AIChatView'
+import FlashcardManager from './components/FlashcardManager'
+import FlashcardReview from './components/FlashcardReview'
 import Settings from './components/Settings'
 import SoftAurora from './components/SoftAurora'
 import { ChatComponent } from './components/ChatComponent'
+import Onboard from './components/Onboard'
+import { useUserStore } from './stores/userStore'
+import { Hero } from './components/Hero'
 
 gsap.registerPlugin(ScrollTrigger)
 
 function App(): React.JSX.Element {
-  const [chatOpen, setChatOpen] = useState(false)
+  const { userDetails, hydrated, hydrate } = useUserStore()
+
+  useEffect(() => {
+    hydrate()
+  }, [])
+
+  if (!hydrated) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950">
+        <div className="flex gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:0ms]" />
+          <span className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:150ms]" />
+          <span className="w-2 h-2 rounded-full bg-indigo-500 animate-bounce [animation-delay:300ms]" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!userDetails) return <Onboard />
 
   return (
     <Router>
+      <AppContent />
+    </Router>
+  )
+}
+
+function AppContent() {
+  const [chatOpen, setChatOpen] = useState(false)
+  const location = useLocation()
+  const isReviewPage = location.pathname === '/review'
+
+  return (
+    <>
       <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
         <SoftAurora
           speed={0.3} scale={1.5} brightness={1}
@@ -29,18 +67,24 @@ function App(): React.JSX.Element {
         />
       </div>
 
-      <Leftbar  />
+      {!isReviewPage && <Leftbar />}
 
       <Routes>
         <Route path="/" element={<Hero />} />
-        <Route path="/library" element={<Library />} />
+        <Route path ="dash" element={<Dashboard/>}/>
+        <Route path="/library" element={<LibraryView />} />
+        <Route path="/deep-dive" element={<DeepDive />} />
+        <Route path="/ingestion" element={<IngestionView />} />
+        <Route path="/transcription" element={<TranscriptionView />} />
+        <Route path="/ai-chat" element={<AIChatView />} />
+        <Route path="/flashcards" element={<FlashcardManager />} />
+        <Route path="/review" element={<FlashcardReview />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/desk" element={<Desk />} />
       </Routes>
 
       {/* ── Persistent chat panel — always mounted, never reloads the model ── */}
-      <PersistentChat chatOpen={chatOpen} setChatOpen={setChatOpen} />
-    </Router>
+      {!isReviewPage && <PersistentChat chatOpen={chatOpen} setChatOpen={setChatOpen} />}
+    </>
   )
 }
 
@@ -106,7 +150,7 @@ function PersistentChat({
       <button
         onClick={() => toggle(!chatOpen)}
         aria-label={chatOpen ? 'Close Deskmate' : 'Open Deskmate'}
-        className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors text-sm font-medium shadow-lg"
+        className="fixed top-8 right-60 z-50 flex items-center gap-2 px-4 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors text-sm font-medium shadow-lg"
       >
         <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
           <line

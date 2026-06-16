@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { StoredModel } from '../../../shared/models';
 import { useModelStore } from '../stores/modelStore';
+import { useUserStore } from '../stores/userStore';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ interface CatalogModel {
   name: string;
   description: string;
   size: string;
-  type: string;
+  type: 'LLM' | 'Speech' | 'Embedding';
   src: string;
   method: 'p2p' | 'http';
   badge?: string;
@@ -73,6 +74,14 @@ const CATALOG: CatalogModel[] = [
     size: '~142 MB',
     type: 'Speech',
     src: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
+    method: 'http',
+  },
+  {
+    name: 'EmbeddingGemma 300M (Q4_0)',
+    description: 'Lightweight embedding model for semantic search and RAG.',
+    size: '~180 MB',
+    type: 'Embedding',
+    src: 'https://huggingface.co/bartowski/EmbeddingGemma-300M-GGUF/resolve/main/embedding-gemma-300m-Q4_0.gguf',
     method: 'http',
   },
 ];
@@ -230,7 +239,7 @@ const DownloadItem: React.FC<{
               id={`set-active-download-${item.id}`}
               onClick={() => onSetActive(item)}
               disabled={isActiveModel}
-              className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] transition-all ${
+              className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-[11px] transition-all \${
                 isActiveModel
                   ? 'border-emerald-500/30 bg-emerald-900/10 text-emerald-400 cursor-default'
                   : 'border-blue-500/40 text-blue-300 hover:bg-blue-900/20'
@@ -267,23 +276,69 @@ const DownloadItem: React.FC<{
 
 const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState('account');
-  const [profileName, setProfileName] = useState('Bartosz');
-  const [profileSurname, setProfileSurname] = useState('Mcdaniel');
-  const [email, setEmail] = useState('bartmcdaniel@thecosystem.com');
+  const { userDetails, hydrate: hydrateUser, saveUserDetails } = useUserStore();
+  const [profileName, setProfileName] = useState('');
+  const [profileSurname, setProfileSurname] = useState('');
+  const [email, setEmail] = useState('');
+  const [nickname, setNickname] = useState('');
   const [uptime, setUptime] = useState('0h 0m');
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [saveError, setSaveError] = useState('');
+  const [hfToken, setHfToken] = useState<string>(localStorage.getItem('hfToken') || '');
 
   const [downloads, setDownloads] = useState<DownloadEntry[]>([]);
   const [customSrc, setCustomSrc] = useState('');
   const [customName, setCustomName] = useState('');
   const [downloadMode, setDownloadMode] = useState<'catalogue' | 'custom'>('catalogue');
-  const [filterType, setFilterType] = useState<'all' | 'LLM' | 'Speech'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'LLM' | 'Speech' | 'Embedding'>('all');
 
   const progressCleanupRef = useRef<(() => void) | null>(null);
   const { models, activeModel, hydrate, saveModel, setActiveModel } = useModelStore();
 
   useEffect(() => {
     hydrate();
-  }, [hydrate]);
+    hydrateUser();
+  }, [hydrate, hydrateUser]);
+
+  useEffect(() => {
+    if (userDetails) {
+      setProfileName(userDetails.name || '');
+      setProfileSurname(userDetails.surname || '');
+      setEmail(userDetails.email || '');
+      setNickname(userDetails.nickname || '');
+    }
+  }, [userDetails]);
+
+  const handleSaveProfile = async () => {
+    if (!nickname.trim() || !profileName.trim() || !profileSurname.trim() || !email.trim()) {
+      setSaveStatus('error');
+      setSaveError('All fields are required.');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+\$/;
+    if (!emailRegex.test(email.trim())) {
+      setSaveStatus('error');
+      setSaveError('Please enter a valid email address.');
+      return;
+    }
+
+    setSaveStatus('saving');
+    setSaveError('');
+    try {
+      await saveUserDetails({
+        nickname: nickname.trim(),
+        name: profileName.trim(),
+        surname: profileSurname.trim(),
+        email: email.trim()
+      });
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 3000);
+    } catch (err: any) {
+      setSaveStatus('error');
+      setSaveError(err?.message || 'Failed to save changes.');
+    }
+  };
 
   // ── Uptime ticker ──
   useEffect(() => {
@@ -351,7 +406,8 @@ const Settings: React.FC = () => {
           assetSrc,
           assetId: result.assetId,
           localPath: result.localPath,
-          type: name.toLowerCase().includes('whisper') ? 'Speech' : 'LLM',
+          type: (name.toLowerCase().includes('whisper') ? 'Speech' :
+                name.toLowerCase().includes('embedding') ? 'Embedding' : 'LLM') as any,
           status: 'completed'
         });
       }
@@ -364,7 +420,7 @@ const Settings: React.FC = () => {
 
   const handleCatalogueDownload = (model: CatalogModel) => {
     startDownload(model.src, model.name);
-    setActiveTab('model'); // stay on model tab so user sees queue
+    setActiveTab('model');
   };
 
   const handleCustomDownload = () => {
@@ -390,7 +446,8 @@ const Settings: React.FC = () => {
       assetSrc: item.assetSrc,
       assetId: item.assetId,
       localPath: item.localPath,
-      type: item.name.toLowerCase().includes('whisper') ? 'Speech' : 'LLM',
+      type: (item.name.toLowerCase().includes('whisper') ? 'Speech' :
+            item.name.toLowerCase().includes('embedding') ? 'Embedding' : 'LLM') as any,
       status: 'completed',
       isActive: true
     });
@@ -400,7 +457,7 @@ const Settings: React.FC = () => {
     await saveModel({
       name: model.name,
       assetSrc: model.src,
-      type: model.type === 'LLM' || model.type === 'Speech' ? model.type : 'Other',
+      type: model.type as any,
       status: 'available',
       isActive: true
     });
@@ -417,7 +474,7 @@ const Settings: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
       {/* ── Sticky Header ── */}
-      <div className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
+      <div className="sticky top-0 z-3 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
         <div className="mx-auto max-w-7xl px-8 py-6">
           <h1 className="text-3xl font-bold text-white">Settings</h1>
           <p className="mt-1 text-sm text-slate-400">Manage your account, models, and preferences</p>
@@ -452,9 +509,41 @@ const Settings: React.FC = () => {
               <div className="rounded-xl border border-slate-700 bg-slate-800/40 backdrop-blur p-8">
                 <div className="flex gap-12">
                   <div className="flex-1 space-y-6">
+                    {saveStatus === 'error' && saveError && (
+                      <div className="px-4 py-2.5 bg-red-900/10 border border-red-500/30 rounded-lg text-xs text-red-400 font-medium">
+                        {saveError}
+                      </div>
+                    )}
+                    {saveStatus === 'success' && (
+                      <div className="px-4 py-2.5 bg-emerald-900/10 border border-emerald-500/30 rounded-lg text-xs text-emerald-400 font-medium">
+                        Profile updated successfully!
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-6">
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-2">Name</label>
+                        <label className="block text-xs font-medium text-slate-400 mb-2">Nickname</label>
+                        <input
+                          id="profile-nickname"
+                          type="text"
+                          value={nickname}
+                          onChange={(e) => setNickname(e.target.value)}
+                          className="w-full rounded-md border border-slate-600 bg-slate-900/50 px-4 py-2.5 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-2">Email</label>
+                        <input
+                          id="profile-email"
+                          type="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="w-full rounded-md border border-slate-600 bg-slate-900/50 px-4 py-2.5 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-2">First Name</label>
                         <input
                           id="profile-name"
                           type="text"
@@ -474,20 +563,21 @@ const Settings: React.FC = () => {
                         />
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-2">Email</label>
-                      <input
-                        id="profile-email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full rounded-md border border-blue-500 bg-slate-900/50 px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      />
+                    <div className="flex justify-end pt-4">
+                      <button
+                        onClick={handleSaveProfile}
+                        disabled={saveStatus === 'saving'}
+                        className="rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-2.5 text-xs font-semibold text-white hover:from-blue-500 hover:to-blue-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-900/30"
+                      >
+                        {saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
+                      </button>
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-4">
                     <div className="w-32 h-32 rounded-full bg-gradient-to-br from-amber-400 via-orange-400 to-pink-400 flex items-center justify-center shadow-lg">
-                      <span className="text-4xl font-bold text-white">BM</span>
+                      <span className="text-4xl font-bold text-white">
+                        {`${profileName.charAt(0)}${profileSurname.charAt(0)}`.toUpperCase() || 'U'}
+                      </span>
                     </div>
                     <button className="rounded-md border border-slate-600 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-700 transition-colors">
                       Edit photo
@@ -531,7 +621,7 @@ const Settings: React.FC = () => {
                   </div>
                   {/* Type filter */}
                   <div className="flex items-center gap-1.5 rounded-lg border border-slate-700/60 bg-slate-800/40 p-1">
-                    {(['all', 'LLM', 'Speech'] as const).map((f) => (
+                    {(['all', 'LLM', 'Speech', 'Embedding'] as const).map((f) => (
                       <button
                         key={f}
                         id={`filter-${f}`}
