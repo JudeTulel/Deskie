@@ -25,7 +25,10 @@ declare global {
       createChatSession: (chatId: string, title: string) => Promise<ChatSession>
       saveChatMessage: (msg: { id: string; chatId: string; role: 'user' | 'assistant'; content: string; attachedImageUrl?: string; ocrText?: string }) => Promise<ChatMessage>
       deleteChatSession: (chatId: string) => Promise<{ success: boolean }>
-      
+      // Quiz Generation
+      generateFlashcards: (params: { subjectId: string; count: number }) => Promise<Array<{ front: string; back: string }>>
+      generateQuiz: (params: { subjectId: string; count: number }) => Promise<Array<{ question: string; options: string[]; answer: string }>>
+
       // Subjects
       getSubjects: () => Promise<Subject[]>
       saveSubject: (sub: Subject) => Promise<Subject>
@@ -73,4 +76,4 @@ declare global {
   }
 }
 
-export {}
+export { }

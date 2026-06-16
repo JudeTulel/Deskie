@@ -615,25 +615,198 @@ function setupHandlers(): void {
       return { success: false, reason: String(err) }
     }
   })
+
+  // ── Flashcards & Quiz Generation Handlers ──────────────────────────────────
+  
+  // Helper to extract complete JSON objects from potentially truncated output
+  function extractCompleteObjects(raw: string): any[] {
+    const matches = raw.matchAll(/\{[^{}]*"front"[^{}]*"back"[^{}]*\}/gs)
+    const results = []
+    for (const match of matches) {
+      try {
+        results.push(JSON.parse(match[0]))
+      } catch {}
+    }
+    return results
+  }
+
+  function extractCompleteQuestions(raw: string): any[] {
+    const matches = raw.matchAll(/\{[^{}]*"question"[^{}]*"options"[^{}]*"answer"[^{}]*\}/gs)
+    const results = []
+    for (const match of matches) {
+      try {
+        results.push(JSON.parse(match[0]))
+      } catch {}
+    }
+    return results
+  }
+
+  ipcMain.handle(
+    'generate-flashcards',
+    async (_event, { subjectId, count = 5 }) => {
+      const activeModel = getActiveModel()
+      const modelSrc = activeModel?.localPath ?? activeModel?.assetId ?? activeModel?.assetSrc
+      if (!modelSrc) throw new Error('No active model selected.')
+
+      // Force fresh context
+      if (modelId) {
+        await unloadModel({ modelId })
+        modelId = null
+        loadedModelSrc = null
+      }
+      await ensureLLMLoaded(modelSrc)
+
+      // Get subject info and user details
+      const subjects = getSubjects()
+      const subject = subjects.find(s => s.id === subjectId)
+      if (!subject) throw new Error('Subject not found.')
+
+      const user = getUserDetails()
+      const educationLevel = user?.educationLevel ?? 'high school'
+
+      // Tighter prompt = less output = fewer truncations
+      const prompt = `You are a study assistant for a ${educationLevel} student.
+Generate exactly ${count} flashcards about "${subject.name}".
+Rules:
+- Return ONLY a JSON array, nothing else
+- Each item: {"front":"question","back":"answer"}
+- Keep both concise
+
+JSON array:`
+
+      const result = completion({
+        modelId: modelId!,
+        history: [{ role: 'user', content: prompt }],
+        stream: false
+      })
+      const output = await (await result).text
+
+      try {
+        const clean = output.replace(/```json|```/g, '').trim()
+        let flashcards: any[] = []
+        
+        try {
+          // Try full parse first
+          const parsed = JSON.parse(clean)
+          flashcards = Array.isArray(parsed) ? parsed : []
+        } catch {
+          // Fallback: extract whatever complete objects exist
+          console.warn('[FLASHCARD] Full parse failed, extracting partial output...')
+          flashcards = extractCompleteObjects(clean)
+        }
+
+        // Filter valid cards (must have both front and back)
+        flashcards = flashcards.filter(c => c.front && c.back)
+
+        if (flashcards.length === 0) throw new Error('No valid flashcards extracted')
+        return flashcards.slice(0, count)
+
+      } catch (e) {
+        console.error('[FLASHCARD] Failed to parse LLM output:', output)
+        return [
+          { front: `What is a key concept in ${subject.name}?`, back: 'Review your notes for core definitions.' },
+          { front: `Give an example related to ${subject.name}.`, back: 'Think about real-world applications.' },
+        ].slice(0, count)
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'generate-quiz',
+    async (_event, { subjectId, count = 3 }) => {
+      const activeModel = getActiveModel()
+      const modelSrc = activeModel?.localPath ?? activeModel?.assetId ?? activeModel?.assetSrc
+      if (!modelSrc) throw new Error('No active model selected.')
+
+      // Force fresh context
+      if (modelId) {
+        await unloadModel({ modelId })
+        modelId = null
+        loadedModelSrc = null
+      }
+      await ensureLLMLoaded(modelSrc)
+
+      const subjects = getSubjects()
+      const subject = subjects.find(s => s.id === subjectId)
+      if (!subject) throw new Error('Subject not found.')
+
+      const user = getUserDetails()
+      const educationLevel = user?.educationLevel ?? 'high school'
+
+      // Tighter prompt = less output = fewer truncations
+      const prompt = `You are a study assistant for a ${educationLevel} student.
+Generate exactly ${count} multiple-choice quiz questions about "${subject.name}".
+Rules:
+- Return ONLY a JSON array, nothing else
+- Each item: {"question":"...","options":["A","B","C","D"],"answer":"A"}
+- answer must exactly match one option string
+- Keep questions concise
+
+JSON array:`
+
+      const result = completion({
+        modelId: modelId!,
+        history: [{ role: 'user', content: prompt }],
+        stream: false
+      })
+      const output = await (await result).text
+
+      // Extract only complete question objects from potentially truncated JSON
+      try {
+        const clean = output.replace(/```json|```/g, '').trim()
+        let quiz: any[] = []
+        
+        try {
+          // Try full parse first
+          const parsed = JSON.parse(clean)
+          quiz = Array.isArray(parsed) ? parsed : []
+        } catch {
+          // Fallback: extract whatever complete objects exist
+          console.warn('[QUIZ] Full parse failed, extracting partial output...')
+          quiz = extractCompleteQuestions(clean)
+        }
+
+        // Filter out malformed questions
+        quiz = quiz.filter(q =>
+          q.question && Array.isArray(q.options) && q.options.length >= 2 && q.answer &&
+          q.options.includes(q.answer)
+        )
+
+        if (quiz.length === 0) throw new Error('No valid questions extracted')
+        return quiz.slice(0, count)
+
+      } catch (e) {
+        console.error('[QUIZ] Failed to parse LLM output:', output)
+        return [{
+          question: `What is a key concept in ${subject.name}?`,
+          options: ['Option A', 'Option B', 'Option C', 'Option D'],
+          answer: 'Option A'
+        }]
+      }
+    }
+  )
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.electron')
   initModelStore()
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  // Pre-download & warm up the embedding model BEFORE creating the window
+  console.log('[EMBED] Pre-loading embedding model on startup...')
+  try {
+    await ensureEmbeddingLoaded()
+    console.log('[EMBED] Embedding model ready.')
+  } catch (err) {
+    console.error('[EMBED] Failed to preload embedding model:', err)
+    // Optionally: Show a user-friendly error or retry
+  }
+
   createWindow()
   setupHandlers()
-
-  // Pre-download & warm up the embedding model in the background
-  // so it's ready before the user tries to ingest anything
-  console.log('[EMBED] Pre-loading embedding model on startup...')
-  ensureEmbeddingLoaded()
-    .then(() => console.log('[EMBED] Embedding model ready.'))
-    .catch((err) => console.warn('[EMBED] Background embedding preload failed:', err))
 })
-
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })

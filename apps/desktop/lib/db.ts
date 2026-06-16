@@ -45,7 +45,7 @@ export function initDb(): void {
   if (db) return
 
   db = new DatabaseSync(join(app.getPath('userData'), 'deskie.sqlite'))
-
+ 
   db.exec(`
     CREATE TABLE IF NOT EXISTS models (
       id TEXT PRIMARY KEY,

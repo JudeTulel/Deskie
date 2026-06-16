@@ -49,11 +49,15 @@ contextBridge.exposeInMainWorld('qvacAPI', {
   getFlashcards: (): Promise<Flashcard[]> => ipcRenderer.invoke('get-flashcards'),
   saveFlashcard: (card: Flashcard): Promise<Flashcard> => ipcRenderer.invoke('save-flashcard', card),
   deleteFlashcard: (id: string): Promise<{ success: boolean }> => ipcRenderer.invoke('delete-flashcard', id),
+  generateFlashcards: (params: { subjectId: string; count: number }): Promise<Array<{ front: string; back: string }>> =>
+  ipcRenderer.invoke('generate-flashcards', params),
 
+  
   // Quizzes
   getQuizzes: (): Promise<Quiz[]> => ipcRenderer.invoke('get-quizzes'),
   saveQuiz: (quiz: Quiz): Promise<Quiz> => ipcRenderer.invoke('save-quiz', quiz),
-
+  generateQuiz: (params: { subjectId: string; count: number }): Promise<Array<{ question: string; options: string[]; answer: string }>> =>
+  ipcRenderer.invoke('generate-quiz', params),
   // Activities
   getActivities: (): Promise<Activity[]> => ipcRenderer.invoke('get-activities'),
   saveActivity: (act: { action: string }): Promise<Activity> => ipcRenderer.invoke('save-activity', act),
