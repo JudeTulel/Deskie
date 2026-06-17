@@ -62,7 +62,7 @@
     "vite": "^7.2.6"
   },
   "build": {
-    "appId": "com.deskie.app",
+    "appId": "com.ystudios.deskie",
     "productName": "Deskie",
     "win": {
       "target": "nsis",
