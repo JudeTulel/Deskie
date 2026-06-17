@@ -1,4 +1,4 @@
-# Deskie (KPL)
+# Deskie
 
 Most student tools are passive: you dump content in, you get nothing back. KPL flips that. Every piece of content a student captures — a lecture recording, a scanned slide, a PDF — is immediately turned into something interactive: searchable notes, flashcards, quizzes, and a personal AI tutor that has read everything they have.
 
