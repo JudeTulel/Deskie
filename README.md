@@ -23,6 +23,7 @@ This project is built with **Electron**, **React**, and **TypeScript**.
 
 1. **Install Dependencies**
    ```bash
+   cd apps/desktop
    npm install
    ```
 
