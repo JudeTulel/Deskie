@@ -46,8 +46,6 @@ export function initDb(): void {
 
   db = new DatabaseSync(join(app.getPath('userData'), 'deskie.sqlite'))
   db.exec(`
-    DROP TABLE IF EXISTS user_details;DROP TABLE IF EXISTS documents;DROP TABLE IF EXISTS subjects;DROP TABLE IF EXISTS flashcards;DROP TABLE IF EXISTS quizzes;`)
-  db.exec(`
     CREATE TABLE IF NOT EXISTS models (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
