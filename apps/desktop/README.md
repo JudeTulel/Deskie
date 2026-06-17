@@ -101,3 +101,33 @@ The renderer process accesses these SDK features via Electron IPC handlers defin
 - `ipcMain.handle('rag-ingest', ...)` -> `ragIngest`
 - `ipcMain.handle('run-ocr', ...)` -> `ocr`
 - `ipcMain.handle('transcribe-audio', ...)` -> `transcribe`
+
+#### Development Server Run Logs
+- Within the file "apps/desktop/DevRunLog"
+- Details on model loading , unloading, and inference requests are logged.
+
+## Local Database
+
+Deskie uses **SQLite** for persistent local storage, managed via `node:sqlite`.
+
+### Database Location
+The database file is located in the user's data directory:
+- **Windows:** `%APPDATA%/Deskie/deskie.sqlite`
+- **macOS:** `~/Library/Application Support/Deskie/deskie.sqlite`
+- **Linux:** `~/.config/Deskie/deskie.sqlite`
+
+### Schema Overview
+
+The database consists of the following key tables:
+
+- **`models`**: Stores metadata and local paths for AI models (LLMs, Embedding, OCR, Whisper).
+- **`user_details`**: Stores user profile information, including education level and study goals.
+- **`subjects`**: Organises user content into specific areas of study.
+- **`documents`**: Tracks ingested files (PDFs, images, etc.) and their RAG ingestion status.
+- **`chats` & `chat_messages`**: Stores conversation history with the personal AI tutor.
+- **`flashcards`**: Stores AI-generated and manual flashcards with Spaced Repetition (SRS) metadata.
+- **`quizzes`**: Records results and performance from subject-specific quizzes.
+- **`activities`**: Maintains a log of user actions for progress tracking.
+
+### Data Management
+Database operations are handled in `lib/db.ts`, which provides a clean API for the Electron main process to interact with the local store. All data remains strictly local to the user's device.
