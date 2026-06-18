@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "An Electron application with React and TypeScript",
   "main": "./dist/main/index.js",
-  "author": "example.com",
+  "author": "ystudios.co.ke",
   "homepage": "https://electron-vite.org",
   "scripts": {
     "format": "prettier --write .",
@@ -27,7 +27,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@gsap/react": "^2.1.2",
-    "@qvac/sdk": "^0.12.2",
+    "@qvac/sdk": "^0.13.3",
     "@tailwindcss/vite": "^4.3.0",
     "electron-updater": "^6.3.9",
     "gsap": "^3.15.0",

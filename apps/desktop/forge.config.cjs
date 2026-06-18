@@ -1,6 +1,7 @@
 "use strict";
 
 const path = require("path");
+const QvacForgePlugin = require("@qvac/sdk/electron-forge");
 
 module.exports = {
   packagerConfig: {
@@ -11,14 +12,16 @@ module.exports = {
       path.resolve(__dirname, "../../node_modules"),
       path.resolve(__dirname, "node_modules")
     ],
-    asar: {
-      unpack: "**/node_modules/@qvac/**/*"
-    },
     ignore: [
       /^\/src/,
       /^\/\.vite/,
       /^\/forge\.config/,
-      /^\/node_modules\/.cache/
+      /^\/node_modules\/.cache/,
+      /^\/\.idea/,
+      /^\/\.vscode/,
+      /^\/\.git/,
+      /^\/tsconfig/,
+      /^\/eslint/
     ]
   },
   rebuildConfig: {},
@@ -27,5 +30,10 @@ module.exports = {
       name: "@electron-forge/maker-zip",
       platforms: ["darwin", "linux", "win32"]
     }
+  ],
+  plugins: [
+    new QvacForgePlugin({
+      logLevel: "info"
+    })
   ]
 };
