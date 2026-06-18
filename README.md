@@ -19,6 +19,12 @@ This project is built with **Electron**, **React**, and **TypeScript**.
 - [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
 - [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
 
+### Hardware Used
+HP probook 450g7
+16GB RAM , NVIDIA MX250 2GBVRAM , Intel Core i7 10510U
+<img width="1920" height="1080" alt="G pu" src="https://github.com/user-attachments/assets/abed5765-784b-4a32-8665-943726ea987e" />
+
+
 ### Project Setup
 
 1. **Install Dependencies**
