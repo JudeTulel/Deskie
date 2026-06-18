@@ -75,9 +75,10 @@ contextBridge.exposeInMainWorld('qvacAPI', {
   // Model download
   downloadModel: (
     assetSrc: string,
-    downloadId: string
+    downloadId: string,
+    hfToken?: string
   ): Promise<{ success: boolean; assetId?: string; localPath?: string; cancelled?: boolean }> =>
-    ipcRenderer.invoke('download-model', assetSrc, downloadId),
+    ipcRenderer.invoke('download-model', assetSrc, downloadId, hfToken),
 
   cancelDownload: (downloadId: string): Promise<{ success: boolean; reason?: string }> =>
     ipcRenderer.invoke('cancel-download', downloadId),

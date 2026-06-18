@@ -60,7 +60,8 @@ declare global {
       transcribeAudio: (params: { filePath: string; subjectId?: string }) => Promise<{ text: string }>
       downloadModel: (
         assetSrc: string,
-        downloadId: string
+        downloadId: string,
+        hfToken?: string
       ) => Promise<{ success: boolean; assetId?: string; localPath?: string; cancelled?: boolean }>
       cancelDownload: (downloadId: string) => Promise<{ success: boolean; reason?: string }>
       onDownloadProgress: (

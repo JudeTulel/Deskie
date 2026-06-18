@@ -53,6 +53,7 @@ let modelId: string | null = null
 let loadModelPromise: Promise<string> | null = null
 let modelClientCount = 0
 let loadedModelSrc: string | null = null
+const MAX_LLM_CONTEXT_SIZE = 8192
 
 // ── Embedding model state (for RAG ingest/search) ─────────────────────────────
 let embeddingModelId: string | null = null
@@ -107,7 +108,12 @@ async function ensureLLMLoaded(modelSrc: string): Promise<string> {
   console.log('[LLM] Loading model:', modelSrc)
   loadModelPromise = loadModel({
     modelSrc,
-    modelType: 'llamacpp-completion'
+    modelType: 'llamacpp-completion',
+    modelConfig: {
+      ctx_size: MAX_LLM_CONTEXT_SIZE,
+      'cache-type-k': 'tbq4_0',
+      'cache-type-v': 'pq4_0'
+    }
   })
     .then((id) => {
       modelId = id
@@ -568,11 +574,27 @@ function setupHandlers(): void {
   // ── Model Download ──────────────────────────────────────────────────────────
   const activeDownloads = new Map<string, string>()
 
-  ipcMain.handle('download-model', async (_event, assetSrc: string, downloadId: string) => {
+  function withHuggingFaceToken(assetSrc: string, hfToken?: string): string {
+    if (!hfToken?.trim()) return assetSrc
+
+    try {
+      const url = new URL(assetSrc)
+      const isHuggingFaceUrl = url.hostname === 'huggingface.co' || url.hostname.endsWith('.huggingface.co')
+      if (!isHuggingFaceUrl || url.searchParams.has('token')) return assetSrc
+
+      url.searchParams.set('token', hfToken.trim())
+      return url.toString()
+    } catch {
+      return assetSrc
+    }
+  }
+
+  ipcMain.handle('download-model', async (_event, assetSrc: string, downloadId: string, hfToken?: string) => {
     console.log(`[DOWNLOAD] Starting download: ${assetSrc}`)
+    const downloadSrc = withHuggingFaceToken(assetSrc, hfToken)
 
     const op = downloadAsset({
-      assetSrc,
+      assetSrc: downloadSrc,
       onProgress: (progress) => {
         win?.webContents.send('download-progress', {
           downloadId,
@@ -588,7 +610,7 @@ function setupHandlers(): void {
 
     try {
       const assetId = await op
-      const localPath = await getCachedModelPath(assetSrc)
+      const localPath = await getCachedModelPath(downloadSrc) ?? await getCachedModelPath(assetSrc)
       activeDownloads.delete(downloadId)
       console.log(`[DOWNLOAD] Completed: ${assetId}`)
       return { success: true, assetId, localPath }
@@ -621,7 +643,7 @@ function setupHandlers(): void {
   // Helper to extract complete JSON objects from potentially truncated output
   function extractCompleteObjects(raw: string): any[] {
     const matches = raw.matchAll(/\{[^{}]*"front"[^{}]*"back"[^{}]*\}/gs)
-    const results = []
+    const results: any[] = []
     for (const match of matches) {
       try {
         results.push(JSON.parse(match[0]))
@@ -632,13 +654,92 @@ function setupHandlers(): void {
 
   function extractCompleteQuestions(raw: string): any[] {
     const matches = raw.matchAll(/\{[^{}]*"question"[^{}]*"options"[^{}]*"answer"[^{}]*\}/gs)
-    const results = []
+    const results: any[] = []
     for (const match of matches) {
       try {
         results.push(JSON.parse(match[0]))
       } catch {}
     }
     return results
+  }
+
+  function normalizeQuizRows(rows: any[]): Array<{ question: string; options: string[]; answer: string }> {
+    return rows
+      .map((row) => {
+        if (Array.isArray(row)) {
+          const [question, optionA, optionB, optionC, answer] = row.map((item) => String(item ?? '').trim())
+          const options = [optionA, optionB, optionC].filter(Boolean)
+          if (answer && !options.includes(answer)) options.push(answer)
+
+          return {
+            question,
+            options,
+            answer
+          }
+        }
+
+        const options = Array.isArray(row?.options)
+          ? row.options.map((item) => String(item ?? '').trim()).filter(Boolean)
+          : [row?.optionA, row?.optionB, row?.optionC, row?.optionD]
+              .map((item) => String(item ?? '').trim())
+              .filter(Boolean)
+
+        return {
+          question: String(row?.question ?? '').trim(),
+          options: options.includes(String(row?.answer ?? '').trim()) ? options : [...options, String(row?.answer ?? '').trim()].filter(Boolean),
+          answer: String(row?.answer ?? '').trim()
+        }
+      })
+      .map((item) => {
+        if (/^[A-C]$/i.test(item.answer)) {
+          const answerIndex = item.answer.toUpperCase().charCodeAt(0) - 65
+          return { ...item, answer: item.options[answerIndex] ?? item.answer }
+        }
+        return item
+      })
+      .filter((item) =>
+        item.question &&
+        item.options.length >= 3 &&
+        item.answer &&
+        item.options.includes(item.answer)
+      )
+  }
+
+  function extractNumberedQuizRows(raw: string): any[] {
+    const rows: any[] = []
+    const matches = raw.matchAll(/"\d+"\s*:\s*(\[[^\]]+\])/g)
+
+    for (const match of matches) {
+      try {
+        const parsed = JSON.parse(match[1])
+        if (Array.isArray(parsed)) rows.push(parsed)
+      } catch {}
+    }
+
+    return rows
+  }
+
+  function parseQuizOutput(raw: string): Array<{ question: string; options: string[]; answer: string }> {
+    const clean = raw.replace(/```json|```/g, '').trim()
+
+    try {
+      const parsed = JSON.parse(clean)
+      if (Array.isArray(parsed)) return normalizeQuizRows(parsed)
+      if (parsed && typeof parsed === 'object') return normalizeQuizRows(Object.values(parsed))
+    } catch {}
+
+    const numberedRows = normalizeQuizRows(extractNumberedQuizRows(clean))
+    if (numberedRows.length > 0) return numberedRows
+
+    const arrayMatch = clean.match(/\[[\s\S]*\]/)
+    if (arrayMatch) {
+      try {
+        const parsed = JSON.parse(arrayMatch[0])
+        if (Array.isArray(parsed)) return normalizeQuizRows(parsed)
+      } catch {}
+    }
+
+    return normalizeQuizRows(extractCompleteQuestions(clean))
   }
 
   ipcMain.handle(
@@ -713,7 +814,7 @@ JSON array:`
 
   ipcMain.handle(
     'generate-quiz',
-    async (_event, { subjectId, count = 3 }) => {
+    async (_event, { subjectId }) => {
       const activeModel = getActiveModel()
       const modelSrc = activeModel?.localPath ?? activeModel?.assetId ?? activeModel?.assetSrc
       if (!modelSrc) throw new Error('No active model selected.')
@@ -733,16 +834,18 @@ JSON array:`
       const user = getUserDetails()
       const educationLevel = user?.educationLevel ?? 'high school'
 
-      // Tighter prompt = less output = fewer truncations
-      const prompt = `You are a study assistant for a ${educationLevel} student.
-Generate exactly ${count} multiple-choice quiz questions about "${subject.name}".
+      const questionCount = 5
+      const prompt = `Create ${questionCount} quiz questions for a ${educationLevel} student studying "${subject.name}".
+Return ONLY valid JSON in this exact compact shape:
+[["Question","Option A","Option B","Option C","Correct option text"]]
 Rules:
-- Return ONLY a JSON array, nothing else
-- Each item: {"question":"...","options":["A","B","C","D"],"answer":"A"}
-- answer must exactly match one option string
-- Keep questions concise
+- Create exactly ${questionCount} rows
+- Each row has exactly 5 strings
+- The last string must exactly match one option string from that row
+- Return a top-level array only, not an object with numbered keys
+- No markdown, labels, numbering, explanations, or extra text
 
-JSON array:`
+JSON:`
 
       const result = completion({
         modelId: modelId!,
@@ -753,33 +856,16 @@ JSON array:`
 
       // Extract only complete question objects from potentially truncated JSON
       try {
-        const clean = output.replace(/```json|```/g, '').trim()
-        let quiz: any[] = []
-        
-        try {
-          // Try full parse first
-          const parsed = JSON.parse(clean)
-          quiz = Array.isArray(parsed) ? parsed : []
-        } catch {
-          // Fallback: extract whatever complete objects exist
-          console.warn('[QUIZ] Full parse failed, extracting partial output...')
-          quiz = extractCompleteQuestions(clean)
-        }
-
-        // Filter out malformed questions
-        quiz = quiz.filter(q =>
-          q.question && Array.isArray(q.options) && q.options.length >= 2 && q.answer &&
-          q.options.includes(q.answer)
-        )
+        const quiz = parseQuizOutput(output)
 
         if (quiz.length === 0) throw new Error('No valid questions extracted')
-        return quiz.slice(0, count)
+        return quiz.slice(0, questionCount)
 
       } catch (e) {
         console.error('[QUIZ] Failed to parse LLM output:', output)
         return [{
           question: `What is a key concept in ${subject.name}?`,
-          options: ['Option A', 'Option B', 'Option C', 'Option D'],
+          options: ['Option A', 'Option B', 'Option C'],
           answer: 'Option A'
         }]
       }

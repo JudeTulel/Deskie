@@ -1,12 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { useModelStore } from '../stores/modelStore'
 import { useChatStore } from '../stores/chatStore'
 import { useStudyStore } from '../stores/studyStore'
 
 export default function AIChatView() {
   const { subjects } = useStudyStore()
-  const { activeModel } = useModelStore()
   const {
     chats,
     activeChatId,
@@ -21,7 +19,6 @@ export default function AIChatView() {
   // State
   const [input, setInput] = useState('')
   const [processing, setProcessing] = useState(false)
-  const [loading, setLoading] = useState(false)
   const [searchMode, setSearchMode] = useState<'notes' | 'free'>('notes')
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('')
   
@@ -83,7 +80,7 @@ export default function AIChatView() {
 
   // Handle Send
   const handleSend = async () => {
-    if (!input.trim() || processing || loading) return
+    if (!input.trim() || processing) return
 
     const userQuery = input
     setInput('')
@@ -300,10 +297,10 @@ export default function AIChatView() {
           ) : (
             chatMessages.map((m) => (
               <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] rounded-2xl p-4 text-xs leading-relaxed ${
+                <div className={`max-w-[80%] px-3 py-1.5 rounded-xl text-xs ${
                   m.role === 'user'
-                    ? 'bg-indigo-600 text-white rounded-br-sm shadow-md'
-                    : 'bg-zinc-800/40 border border-zinc-850 text-zinc-150 rounded-bl-sm shadow-sm prose prose-invert prose-xs max-w-none'
+                    ? 'bg-indigo-600 text-white rounded-br-sm whitespace-pre-wrap'
+                    : 'bg-zinc-800 text-zinc-100 rounded-bl-sm prose prose-invert prose-xs max-w-none'
                 }`}>
                   <ReactMarkdown>{m.content}</ReactMarkdown>
                   

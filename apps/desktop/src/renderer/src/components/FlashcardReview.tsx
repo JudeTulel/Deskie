@@ -201,7 +201,7 @@ export default function FlashcardReview() {
             {/* Card inner */}
             <div 
               className={`w-full h-full relative transition-all duration-550 transform preserve-3d ${
-                isFlipped ? 'rotate-y-180' : ''
+                isFlipped ? 'rotate-y-180 ' : ''
               }`}
             >
               {/* CARD FRONT */}
@@ -216,15 +216,15 @@ export default function FlashcardReview() {
               </div>
 
               {/* CARD BACK */}
-              <div className="absolute inset-0 w-full h-full bg-zinc-900 border border-zinc-800 rounded-3xl p-6 flex flex-col justify-between backface-hidden rotate-y-180 shadow-2xl">
-                <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wider block">Answer</span>
-                <div className="flex-1 flex items-center justify-center text-center text-base font-medium text-slate-200 leading-relaxed">
-                  {activeCard.back}
-                </div>
-                <div className="text-center text-[10px] text-zinc-500">
-                  Rate your recollection difficulty below
-                </div>
-              </div>
+<div className="absolute inset-0 w-full h-full bg-black border border-zinc-800 rounded-3xl p-6 flex flex-col justify-between backface-hidden rotate-y-180 shadow-2xl">
+  <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wider block">Answer</span>
+  <div className="flex-1 flex items-center justify-center text-center text-base font-medium text-slate-200 leading-relaxed">
+    {activeCard.back}
+  </div>
+  <div className="text-center text-[10px] text-zinc-500">
+    Rate your recollection difficulty below
+  </div>
+</div>
             </div>
           </div>
 

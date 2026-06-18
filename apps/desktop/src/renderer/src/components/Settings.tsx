@@ -177,7 +177,7 @@ const DownloadItem: React.FC<{
 
   return (
     <div
-      className="group relative rounded-xl border border-slate-700/60 bg-slate-800/30 p-4 transition-all hover:border-slate-600/80"
+      className=" group relative rounded-xl border border-slate-700/60 bg-slate-800/30 p-4 transition-all hover:border-slate-600/80"
       style={{ backdropFilter: 'blur(8px)' }}
     >
       {/* Header row */}
@@ -309,6 +309,12 @@ const Settings: React.FC = () => {
     }
   }, [userDetails]);
 
+  useEffect(() => {
+    const token = hfToken.trim();
+    if (token) localStorage.setItem('hfToken', token);
+    else localStorage.removeItem('hfToken');
+  }, [hfToken]);
+
   const handleSaveProfile = async () => {
     if (!nickname.trim() || !profileName.trim() || !profileSurname.trim() || !email.trim()) {
       setSaveStatus('error');
@@ -390,7 +396,7 @@ const Settings: React.FC = () => {
     setDownloads((prev) => [entry, ...prev]);
 
     try {
-      const result = await window.qvacAPI.downloadModel(assetSrc, id);
+      const result = await window.qvacAPI.downloadModel(assetSrc, id, hfToken.trim() || undefined);
       setDownloads((prev) =>
         prev.map((d) =>
           d.id === id
@@ -416,7 +422,7 @@ const Settings: React.FC = () => {
         prev.map((d) => (d.id === id ? { ...d, status: 'error', error: err?.message ?? String(err) } : d))
       );
     }
-  }, [saveModel]);
+  }, [hfToken, saveModel]);
 
   const handleCatalogueDownload = (model: CatalogModel) => {
     startDownload(model.src, model.name);
@@ -472,7 +478,7 @@ const Settings: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+    <div className="pl-36 min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
       {/* ── Sticky Header ── */}
       <div className="sticky top-0 z-3 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
         <div className="mx-auto max-w-7xl px-8 py-6">
@@ -612,6 +618,37 @@ const Settings: React.FC = () => {
             </div>
 
             {/* ─ Model Catalogue ─ */}
+            <section className="rounded-xl border border-slate-700/60 bg-slate-800/30 p-5" style={{ backdropFilter: 'blur(8px)' }}>
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="min-w-0 flex-1">
+                  <label className="block text-xs font-medium text-slate-400 mb-2">
+                    Hugging Face token <span className="text-slate-600">(optional)</span>
+                  </label>
+                  <input
+                    id="hf-token"
+                    type="password"
+                    value={hfToken}
+                    onChange={(e) => setHfToken(e.target.value)}
+                    placeholder="hf_..."
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-lg border border-slate-600 bg-slate-900/60 px-4 py-3 text-sm text-slate-100 placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <button
+                  id="clear-hf-token"
+                  onClick={() => setHfToken('')}
+                  disabled={!hfToken}
+                  className="rounded-lg border border-slate-700/70 px-4 py-3 text-xs font-semibold text-slate-400 transition-colors hover:border-slate-600 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Clear token
+                </button>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-slate-500">
+                Used only for Hugging Face download URLs that need access. Public models continue downloading without a token.
+              </p>
+            </section>
+
             {downloadMode === 'catalogue' && (
               <section>
                 <div className="flex items-center justify-between mb-5">

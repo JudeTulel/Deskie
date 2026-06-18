@@ -28,7 +28,7 @@ export default function DeepDive() {
 
   // Quiz modal state
   const [showQuizGenModal, setShowQuizGenModal] = useState(false)
-  const [quizGenCount, setQuizGenCount] = useState(3)
+  const [quizGenCount] = useState(5)
   const [activeQuizQuestions, setActiveQuizQuestions] = useState<Array<{ question: string; options: string[]; answer: string }>>([])
   const [userQuizAnswers, setUserQuizAnswers] = useState<Record<number, string>>({})
   const [quizSubmitted, setQuizSubmitted] = useState(false)
@@ -509,56 +509,77 @@ export default function DeepDive() {
 
       {/* ── QUIZ MODAL ── */}
       {showQuizGenModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           {/* Blurry glass backdrop — clicking it closes the modal */}
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-md" onClick={closeQuizModal} />
+          <div className="absolute inset-0 bg-black/55 backdrop-blur-md" onClick={closeQuizModal} />
 
-          <div className="relative z-10 w-[480px] bg-zinc-900/80 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl">
+          <div className="relative z-10 w-full max-w-[560px] overflow-hidden rounded-3xl border border-zinc-700/70 bg-zinc-950/95 shadow-2xl shadow-black/50">
+            <div className="flex items-center justify-between border-b border-zinc-800/90 bg-zinc-900/70 px-5 py-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Practice quiz</p>
+                <h2 className="mt-1 text-sm font-bold text-white">{currentSubject?.name ?? 'Subject'} review</h2>
+              </div>
+              <button
+                onClick={closeQuizModal}
+                className="grid h-8 w-8 place-items-center rounded-full border border-zinc-700/70 bg-zinc-900 text-zinc-400 transition-colors hover:border-zinc-600 hover:text-white"
+                aria-label="Close quiz"
+              >
+                x
+              </button>
+            </div>
+
+            <div className="p-5">
 
             {activeQuizQuestions.length === 0 ? (
-              <div className="text-center py-8 text-zinc-500 text-xs">No questions generated.</div>
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 px-4 py-8 text-center text-xs text-zinc-500">No questions generated.</div>
             ) : quizSubmitted ? (
               /* ── Results ── */
               <div className="space-y-5">
                 {/* Progress — all done */}
-                <div className="flex gap-1">
+                <div className="flex gap-1.5">
                   {activeQuizQuestions.map((_, i) => (
-                    <div key={i} className="flex-1 h-1.5 rounded-full bg-emerald-500" />
+                    <div key={i} className="h-1.5 flex-1 rounded-full bg-emerald-500" />
                   ))}
                 </div>
 
-                <div>
-                  <div className="text-2xl mb-1">{Math.round((quizScore / activeQuizQuestions.length) * 100) >= 80 ? '🎉' : '📊'}</div>
-                  <h3 className="text-sm font-medium text-white">Quiz complete</h3>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">Here's how you did.</p>
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Score</p>
+                  <div className="mt-2 flex items-end justify-between gap-4">
+                    <div>
+                      <div className="text-3xl font-black text-white">{quizScore} / {activeQuizQuestions.length}</div>
+                      <div className="mt-1 text-xs text-zinc-400">{Math.round((quizScore / activeQuizQuestions.length) * 100)}% accuracy</div>
+                    </div>
+                    <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                      Complete
+                    </div>
+                  </div>
                 </div>
 
-                <div className="bg-white/5 border border-white/8 rounded-2xl p-4">
-                  <div className="text-2xl font-bold text-white">{quizScore} / {activeQuizQuestions.length}</div>
-                  <div className="text-xs text-zinc-400 mt-1">{Math.round((quizScore / activeQuizQuestions.length) * 100)}% accuracy</div>
-                </div>
-
-                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                <div className="max-h-[260px] space-y-2 overflow-y-auto pr-1">
                   {activeQuizQuestions.map((q, i) => (
-                    <div key={i} className="bg-zinc-800/40 border border-zinc-800 rounded-xl p-3">
-                      <div className="flex gap-2 items-start">
-                        <span className="text-xs">{userQuizAnswers[i] === q.answer ? '✅' : '❌'}</span>
-                        <p className="text-[11px] text-zinc-300 leading-snug">{q.question}</p>
+                    <div key={i} className="rounded-2xl border border-zinc-800 bg-zinc-900/55 p-3">
+                      <div className="flex items-start gap-3">
+                        <span className={`mt-0.5 grid h-5 w-5 flex-shrink-0 place-items-center rounded-full text-[10px] font-bold ${
+                          userQuizAnswers[i] === q.answer ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'
+                        }`}>
+                          {userQuizAnswers[i] === q.answer ? 'Y' : 'N'}
+                        </span>
+                        <p className="text-xs leading-relaxed text-zinc-300">{q.question}</p>
                       </div>
                       {userQuizAnswers[i] !== q.answer && (
-                        <p className="text-[10px] text-emerald-400 mt-1 ml-5">Correct: {q.answer}</p>
+                        <p className="mt-2 pl-8 text-[11px] text-emerald-300">Correct: {q.answer}</p>
                       )}
                     </div>
                   ))}
                 </div>
 
-                <div className="space-y-2 pt-3 border-t border-white/8">
+                <div className="grid grid-cols-2 gap-2 border-t border-zinc-800/90 pt-4">
                   <button onClick={() => { setQuizSubmitted(false); setCurrentQuizStep(0); setUserQuizAnswers({}); setQuizScore(0) }}
-                    className="w-full py-2.5 rounded-full text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all">
+                    className="rounded-xl border border-indigo-500/40 bg-indigo-500/15 py-2.5 text-xs font-bold text-indigo-100 transition-all hover:bg-indigo-500/25">
                     Try again
                   </button>
                   <button onClick={closeQuizModal}
-                    className="w-full text-xs text-zinc-500 hover:text-zinc-300 transition-colors py-1 text-center">
+                    className="rounded-xl border border-zinc-700/80 bg-zinc-900 py-2.5 text-xs font-bold text-zinc-300 transition-colors hover:border-zinc-600 hover:text-white">
                     Close
                   </button>
                 </div>
@@ -567,66 +588,76 @@ export default function DeepDive() {
               /* ── Question step ── */
               <div className="space-y-5">
                 {/* Progress bar */}
-                <div className="flex gap-1">
+                <div className="flex gap-1.5">
                   {activeQuizQuestions.map((_, i) => (
-                    <div key={i} className={`flex-1 h-1.5 rounded-full transition-all duration-300 ${
-                      i < currentQuizStep ? 'bg-indigo-500' : i === currentQuizStep ? 'bg-indigo-400/60' : 'bg-white/10'
+                    <div key={i} className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                      i < currentQuizStep ? 'bg-indigo-500' : i === currentQuizStep ? 'bg-indigo-300' : 'bg-zinc-800'
                     }`} />
                   ))}
                 </div>
 
-                <div>
-                  <div className="text-2xl mb-1">❓</div>
-                  <h3 className="text-sm font-medium text-white">Question {currentQuizStep + 1} of {activeQuizQuestions.length}</h3>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">Select the correct answer to continue.</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Question {currentQuizStep + 1} of {activeQuizQuestions.length}</p>
+                    <h3 className="mt-1 text-sm font-bold text-white">Choose the best answer</h3>
+                  </div>
+                  <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-[10px] font-bold text-zinc-400">
+                    {Object.keys(userQuizAnswers).length}/{activeQuizQuestions.length}
+                  </span>
                 </div>
 
-                <div className="bg-white/5 border border-white/8 rounded-2xl p-4">
-                  <p className="text-xs font-medium text-white leading-relaxed">{activeQuizQuestions[currentQuizStep]?.question}</p>
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4">
+                  <p className="text-sm font-semibold leading-relaxed text-white">{activeQuizQuestions[currentQuizStep]?.question}</p>
                 </div>
 
-                <div className="space-y-2">
-                  {activeQuizQuestions[currentQuizStep]?.options.map(opt => (
+                <div className="space-y-2.5">
+                  {activeQuizQuestions[currentQuizStep]?.options.map((opt, optIndex) => (
                     <button key={opt}
                       onClick={() => setUserQuizAnswers(p => ({ ...p, [currentQuizStep]: opt }))}
-                      className={`w-full text-left px-3 py-2.5 rounded-xl text-xs border transition-all ${
+                      className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left text-xs transition-all ${
                         userQuizAnswers[currentQuizStep] === opt
-                          ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-200'
-                          : 'border-zinc-700/60 bg-white/[0.03] text-zinc-300 hover:border-indigo-500/40 hover:bg-indigo-500/8'
+                          ? 'border-indigo-400/70 bg-indigo-500/20 text-indigo-100 shadow-lg shadow-indigo-950/20'
+                          : 'border-zinc-800 bg-zinc-900/55 text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800/70'
                       }`}>
-                      {opt}
+                      <span className={`grid h-6 w-6 flex-shrink-0 place-items-center rounded-full border text-[10px] font-bold ${
+                        userQuizAnswers[currentQuizStep] === opt ? 'border-indigo-300 bg-indigo-400 text-zinc-950' : 'border-zinc-700 text-zinc-500'
+                      }`}>
+                        {String.fromCharCode(65 + optIndex)}
+                      </span>
+                      <span className="leading-relaxed">{opt}</span>
                     </button>
                   ))}
                 </div>
 
-                <div className="space-y-2 pt-3 border-t border-white/8">
+                <div className="grid grid-cols-2 gap-2 border-t border-zinc-800/90 pt-4">
+                  {currentQuizStep > 0 ? (
+                    <button onClick={() => setCurrentQuizStep(p => p - 1)}
+                      className="rounded-xl border border-zinc-700/80 bg-zinc-900 py-2.5 text-xs font-bold text-zinc-300 transition-colors hover:border-zinc-600 hover:text-white">
+                      Back
+                    </button>
+                  ) : (
+                    <button onClick={closeQuizModal}
+                      className="rounded-xl border border-zinc-700/80 bg-zinc-900 py-2.5 text-xs font-bold text-zinc-300 transition-colors hover:border-zinc-600 hover:text-white">
+                      Cancel
+                    </button>
+                  )}
                   {currentQuizStep < activeQuizQuestions.length - 1 ? (
                     <button onClick={() => setCurrentQuizStep(p => p + 1)}
                       disabled={userQuizAnswers[currentQuizStep] === undefined}
-                      className="w-full py-2.5 rounded-full text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-all disabled:opacity-30">
+                      className="rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white transition-all hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-30">
                       Continue
                     </button>
                   ) : (
                     <button onClick={handleSubmitQuiz}
                       disabled={userQuizAnswers[currentQuizStep] === undefined}
-                      className="w-full py-2.5 rounded-full text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-30">
+                      className="rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white transition-all hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-30">
                       Submit quiz
-                    </button>
-                  )}
-                  {currentQuizStep > 0 ? (
-                    <button onClick={() => setCurrentQuizStep(p => p - 1)}
-                      className="w-full text-xs text-zinc-500 hover:text-zinc-300 transition-colors py-1 text-center">
-                      ← Back
-                    </button>
-                  ) : (
-                    <button onClick={closeQuizModal}
-                      className="w-full text-xs text-zinc-500 hover:text-zinc-300 transition-colors py-1 text-center">
-                      Cancel
                     </button>
                   )}
                 </div>
               </div>
             )}
+          </div>
           </div>
         </div>
       )}
