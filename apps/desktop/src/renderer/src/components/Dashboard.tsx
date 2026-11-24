@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUserStore } from '../stores/userStore'
 import { useStudyStore } from '../stores/studyStore'
@@ -8,10 +8,9 @@ import { useChatStore } from '../stores/chatStore'
 export default function Dashboard() {
   const navigate = useNavigate()
   const { userDetails } = useUserStore()
-  const { subjects, documents, flashcards, quizzes, activities, loadAll } = useStudyStore()
+  const { subjects, documents, flashcards, activities, loadAll } = useStudyStore()
   const { activeModel } = useModelStore()
-  const { chats, loadChats } = useChatStore()
-  const [chatOpen, setChatOpen] = useState(false)
+  const { loadChats } = useChatStore()
 
   useEffect(() => {
     loadAll()
@@ -28,7 +27,6 @@ export default function Dashboard() {
 
   // Calculate stats
   const dueCardsCount = flashcards.filter(f => f.dueDate <= Date.now()).length
-  const totalCompletedQuizzes = quizzes.length
   
   // Today's Focus Actions
   const focusActions = [

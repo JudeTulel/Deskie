@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Sidebar, Menu, MenuItem } from 'react-pro-sidebar'
 import { Link } from 'react-router-dom'
 import logo from '../assets/images/logo.png'
@@ -110,7 +110,7 @@ const Leftbar = () => {
       >
         <Menu
           menuItemStyles={{
-            button: ({ level, active, disabled }) => {
+            button: ({ level, disabled }) => {
               if (level === 0) {
                 return {
                   color: disabled ? '#f5d9ff' : '#a1a1aa',
@@ -123,6 +123,7 @@ const Leftbar = () => {
                   }
                 }
               }
+              return {}
             }
           }}
         >

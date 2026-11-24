@@ -1,13 +1,11 @@
-import React, { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStudyStore } from '../stores/studyStore'
-import { useModelStore } from '../stores/modelStore'
 import ReactMarkdown from 'react-markdown'
 
 export default function FlashcardReview() {
   const navigate = useNavigate()
-  const { flashcards, subjects, reviewFlashcard } = useStudyStore()
-  const { activeModel } = useModelStore()
+  const { flashcards, reviewFlashcard } = useStudyStore()
 
   // Session state
   const [sessionCards, setSessionCards] = useState<any[]>([])
@@ -21,7 +19,7 @@ export default function FlashcardReview() {
   const [aiLoading, setAiLoading] = useState(false)
 
   // Session stats
-  const [reviewsDone, setReviewsDone] = useState(0)
+  const [, setReviewsDone] = useState(0)
   const [ratingsList, setRatingsList] = useState<number[]>([])
   const [sessionFinished, setSessionFinished] = useState(false)
 
@@ -98,7 +96,6 @@ export default function FlashcardReview() {
 
     // System prompt calls the local model with the card QA context
     const workspaceName = activeCard.subjectId || 'default-workspace'
-    const subjectDetails = subjects.find(s => s.id === activeCard.subjectId)
 
     // Load RAG context matching the card question
     let contextStr = ''

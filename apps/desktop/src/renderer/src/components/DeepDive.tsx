@@ -1,17 +1,15 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStudyStore } from '../stores/studyStore'
 import { useChatStore } from '../stores/chatStore'
-import { useModelStore } from '../stores/modelStore'
 
 export default function DeepDive() {
   const navigate = useNavigate()
   const { 
-    subjects, documents, flashcards, quizzes, activities,
+    subjects, documents, flashcards, quizzes,
     createFlashcard, deleteFlashcard, createQuiz, loadAll 
   } = useStudyStore()
   const { chats, loadChats } = useChatStore()
-  const { activeModel } = useModelStore()
 
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'documents' | 'notes' | 'flashcards' | 'quizzes' | 'chat'>('overview')
@@ -21,7 +19,7 @@ export default function DeepDive() {
 
   // Flashcard modal state
   const [showCardGenModal, setShowCardGenModal] = useState(false)
-  const [cardGenCount, setCardGenCount] = useState(5)
+  const [cardGenCount] = useState(5)
   const [generatedCards, setGeneratedCards] = useState<Array<{ front: string; back: string }>>([])
   const [carouselIndex, setCarouselIndex] = useState(0)
   const [isFlipped, setIsFlipped] = useState(false)

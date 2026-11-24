@@ -6,16 +6,12 @@ import logo from '../assets/images/logo.png'
 import board from '../assets/images/board.png'
 import hat from '../assets/images/hat.png'
 import puzzle from '../assets/images/puzzle.png'
-import flag from '../assets/images/flag.png'
-import sun from "../assets/images/sun.png"
 import searchhat from "../assets/images/searchheart.png"
 import sign from "../assets/images/sign.png"
 import filecheck from "../assets/images/filecheck.png"
 import bar from "../assets/images/bar.png"
 import { useUserStore } from '../stores/userStore'
 
-
-import gsap from 'gsap'
 
 
 // ─── Data ────────────────────────────────────────────────────────────────────
@@ -152,14 +148,6 @@ function StepAge({
   onAge: (v: string) => void
   onLevel: (v: string) => void
 }) {
-  const selectCls = `
-    flex-1 px-3 py-2.5 rounded-xl text-sm
-    border border-black/15 dark:border-white/15
-    bg-white dark:bg-white/5
-    text-[var(--color-text-primary)]
-    focus:outline-none focus:border-[#534AB7]
-    transition-colors
-  `
   return (
 <StepShell
   icon={hat}

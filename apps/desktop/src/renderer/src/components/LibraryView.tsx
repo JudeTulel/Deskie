@@ -2,8 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStudyStore } from '../stores/studyStore'
 import { useChatStore } from '../stores/chatStore'
-import { useModelStore } from '../stores/modelStore'
-import type { Subject, Document } from '../../../shared/models'
 
 export default function LibraryView() {
   const navigate = useNavigate()
@@ -104,7 +102,6 @@ export default function LibraryView() {
     // Create new chat preloaded with context from these docs
     const chatId = 'chat-' + Math.random().toString(36).substring(2, 11)
     const activeDocs = documents.filter(d => batchSelectedIds.includes(d.id))
-    const docNames = activeDocs.map(d => d.name).join(', ')
     const title = `Chat on ${activeDocs.length} docs`
     
     await createChat(chatId, title)
