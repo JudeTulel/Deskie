@@ -281,7 +281,7 @@ const Settings: React.FC = () => {
   const [profileSurname, setProfileSurname] = useState('');
   const [email, setEmail] = useState('');
   const [nickname, setNickname] = useState('');
-  const [uptime, setUptime] = useState('0h 0m');
+  const [, setUptime] = useState('0h 0m');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [saveError, setSaveError] = useState('');
   const [hfToken, setHfToken] = useState<string>(localStorage.getItem('hfToken') || '');

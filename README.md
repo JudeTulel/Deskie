@@ -1,110 +1,129 @@
 # Deskie
 
-Most student tools are passive: you dump content in, you get nothing back. KPL flips that. Every piece of content a student captures — a lecture recording, a scanned slide, a PDF — is immediately turned into something interactive: searchable notes, flashcards, quizzes, and a personal AI tutor that has read everything they have.
+Deskie is a local-first study workspace. It turns the material you already have — lecture recordings, PDFs, scanned slides, notes — into searchable text, an AI tutor that answers from your own documents, flashcards and quizzes. Text generation, embeddings, OCR and transcription all run on your machine through [`@qvac/sdk`](https://www.npmjs.com/package/@qvac/sdk); your library, subjects, chats and study activity are stored in a local SQLite database.
 
-The desktop app is the professional toolkit — where educators and serious students ingest, organise, and author essays and connect to a wider variety of tools. The mobile app is the pocket study companion — always ready to capture a lecture, quiz, or answer a question on the bus.
+Model weights are downloaded from Hugging Face on first use and cached locally. Inference itself does not call a hosted AI API.
 
-## For Developers
+## Apps in this repository
 
-This project is built with **Electron**, **React**, and **TypeScript**.
+| App | Path | State |
+| --- | --- | --- |
+| Desktop | `apps/desktop` | The main application: Electron + React 19 + TypeScript + Tailwind CSS v4, built with electron-vite. |
+| Mobile | `apps/mobile/deskie` | A separate Expo / React Native app, currently in progress (still the default Expo scaffold). |
 
-### Prerequisites
+The desktop app is the full authoring toolkit: ingest documents, review a library of sources, run RAG-backed AI chat with citations, generate and review flashcards/quizzes, and manage local models. The Expo app is intended as the pocket companion for capturing and reviewing material on the go.
 
-- [Node.js](https://nodejs.org/) (latest LTS recommended)
-- [npm](https://www.npmjs.com/)
+## Architecture (desktop)
 
-### Recommended IDE Setup
-
-- [VSCode](https://code.visualstudio.com/)
-- [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
-- [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
-
-### Hardware Used
-HP probook 450g7
-16GB RAM , NVIDIA MX250 2GBVRAM , Intel Core i7 10510U
-<img width="1920" height="1080" alt="G pu" src="https://github.com/user-attachments/assets/abed5765-784b-4a32-8665-943726ea987e" />
-
-
-### Project Setup
-
-1. **Install Dependencies**
-   ```bash
-   cd apps/desktop
-   npm install
-   ```
-
-2. **Development**
-   Starts the application in development mode with hot-reload.
-   ```bash
-   npm run dev
-   ```
-
-3. **Linting and Formatting**
-   ```bash
-   # Run linter
-   npm run lint
-
-   # Format code
-   npm run format
-   ```
-
-4. **Type Checking**
-   ```bash
-   npm run typecheck
-   ```
-
-### Building the Application
-
-To build the production-ready application for your platform:
-
-```bash
-# For Windows
-npm run build:win
-
-# For macOS
-npm run build:mac
-
-# For Linux
-npm run build:linux
+```
+React renderer  ──window.qvacAPI──▶  preload (contextBridge)
+                                          │ ipcRenderer.invoke / ipcMain.handle
+                                          ▼
+                                   Electron main process
+                                     ├─ @qvac/sdk plugins (local models)
+                                     └─ node:sqlite (deskie.sqlite)
 ```
 
-The output will be available in the `dist` or `out` directory.
+### Process model and IPC
 
-## Project Structure
+- `apps/desktop/src/main/index.ts` creates the `BrowserWindow` with `contextIsolation: true` and `nodeIntegration: false`, owns model state, registers the `ipcMain.handle` callbacks, and is the only place that calls `@qvac/sdk` and the database.
+- `apps/desktop/src/preload/index.ts` exposes exactly one bridge, `window.qvacAPI`, through `contextBridge.exposeInMainWorld`. Its TypeScript shape is declared in `src/preload/index.d.ts`.
+- The renderer never gets Node access. It calls typed bridge methods (for example `ragIngest`, `ragSearch`, `infer`, `runOCR`, `transcribeAudio`, `downloadModel`) that map to IPC channels such as `rag-ingest`, `rag-search`, `infer`, `run-ocr`, `transcribe-audio` and `download-model`. CRUD channels cover models, subjects, documents, chats, flashcards, quizzes and activities. Streaming tokens are pushed back with the `completion-stream` event; download progress uses `download-progress`.
 
-- `src/main`: Main process code (Electron).
-- `src/preload`: Preload scripts for secure communication.
-- `src/renderer`: Renderer process (React application).
-- `resources`: Static assets.
+### Local AI stack
 
-## Remote APIs and SDKs
+`apps/desktop/qvac.config.json` enables four QVAC plugins:
 
-This project leverages the **@qvac/sdk** for local AI capabilities, including LLM completions, OCR, RAG, and audio transcription.
+- `llamacpp-completion` — GGUF instruction models run locally through llama.cpp (the seeded default is Llama 3.2 1B Instruct Q4_0 from Hugging Face).
+- `llamacpp-embedding` — Gemma 300M Q4 (`EMBEDDINGGEMMA_300M_Q4_0`) embeddings used for RAG ingest and search.
+- `onnx-ocr` — ONNX OCR (`OCR_LATIN_RECOGNIZER_1`) extracts text from images so scanned slides can be indexed.
+- `whispercpp-transcription` — Whisper via whisper.cpp (default asset `ggml-tiny.bin`) for lecture audio.
 
-### @qvac/sdk Integration
+Models are loaded on demand, streamed during completion, and unloaded when no longer needed; the main process reuses in-flight loads and `src/main/model-store.ts` manages the saved model records and the active model. Downloads support progress reporting and cancellation.
 
-The application interacts with the QVAC SDK primarily in the main process (`src/main/index.ts`). Key functionalities include:
+### RAG with citations
 
-#### Model Management
-- `loadModel(config)`: Initializes AI models (LLM, Embedding, OCR, Whisper).
-- `unloadModel({ modelId })`: Frees up resources by unloading models.
-- `downloadAsset({ assetSrc, onProgress })`: Downloads model assets with progress tracking.
-- `getModelInfo({ name })`: Retrieves cache status and details for specific models.
+- Each subject maps to its own vector workspace: the subject id is used as the workspace name, with `default-workspace` as the fallback.
+- Ingestion extracts text from PDF/DOCX/text/HTML files or from images via OCR, then calls `ragIngest` with `chunkSize: 256` and `chunkOverlap: 50`. The resulting chunk count is stored with the document record.
+- Search calls `ragSearch` with a configurable `topK` (the IPC handler defaults to 5; the AI chat "notes" mode asks for 3). Retrieved chunks are injected into the system prompt with their filenames and surfaced in the chat as citations — the AI chat view lists each cited chunk's filename and match score and opens a detail drawer with the chunk text.
 
-#### AI Capabilities
-- `completion({ modelId, history, stream })`: Generates text responses from LLMs. Supports streaming.
-- `ocr({ modelId, image, options })`: Performs Optical Character Recognition on images.
-- `transcribe({ modelId, audioChunk })`: Transcribes audio files to text using speech-to-text models.
-- `ragIngest({ modelId, documents, workspace, chunkOpts })`: Processes and indexes documents into a vector workspace for RAG.
-- `ragSearch({ modelId, query, workspace, topK })`: Performs vector search within a workspace to find relevant context.
+### Persistence
 
-#### Utilities
-- `cancel({ requestId })`: Aborts ongoing operations like model downloads.
+`apps/desktop/lib/db.ts` uses `node:sqlite`'s `DatabaseSync` with a `deskie.sqlite` file under Electron's `app.getPath('userData')`. Tables cover models, user details, chats, chat messages, subjects, documents (including chunk counts), flashcards, quizzes and an activity log. The renderer reaches this data only through the preload/IPC bridge.
 
-### IPC Communication
+### Renderer
 
-The renderer process accesses these SDK features via Electron IPC handlers defined in `src/main/index.ts`. Examples include:
-- `ipcMain.handle('infer', ...)` -> `completion`
-- `ipcMain.handle('rag-ingest', ...)` -> `ragIngest`
-- `ipcMain.handle('run-ocr', ...)` -> `ocr`
-- `ipcMain.handle('transcribe-audio', ...)` -> `transcribe`
+`apps/desktop/src/renderer/src/App.tsx` uses a `HashRouter` with routes for the hero, dashboard, library, deep dive, ingestion, transcription, AI chat, flashcards, review and settings. State uses Zustand stores; styling is Tailwind CSS v4 with a dark theme; GSAP drives some animation.
+
+## Getting started
+
+Prerequisites:
+
+- Node.js 22+ (for `node:sqlite`) and npm
+- Git on `PATH` (a transitive dependency resolves from a git URL)
+
+From the repository root:
+
+```bash
+npm install --allow-git=all
+```
+
+> **npm 12 note:** npm 12 blocks git dependencies by default. A transitive dependency of the Electron toolchain (`@electron/node-gyp`) resolves to a `git+https`/`git+ssh` URL, so installs need `--allow-git=all`. Without it the install fails during dependency resolution.
+
+To install only the desktop app:
+
+```bash
+cd apps/desktop
+npm install --allow-git=all
+```
+
+### Scripts
+
+From the repository root:
+
+```bash
+npm run desktop        # dev server for apps/desktop
+npm run build:desktop  # production build of the desktop app
+```
+
+From `apps/desktop`:
+
+```bash
+npm run dev            # electron-vite dev with hot reload
+npm run start          # preview a built app
+npm run typecheck      # TypeScript checks for main + renderer
+npm run lint           # ESLint
+npm run format         # Prettier
+npm run build          # typecheck + electron-vite build
+npm run build:unpack   # unpacked directory build
+npm run build:win      # Windows installer (nsis)
+npm run build:mac      # macOS build
+npm run build:linux    # Linux build
+```
+
+Packaged output is written under `apps/desktop/dist` / `out` and `release` depending on the script.
+
+For the in-progress mobile app, run it directly from its directory (the root `mobile` script still points at `apps/mobile`, which has no package.json):
+
+```bash
+cd apps/mobile/deskie
+npm install
+npm start              # expo start; android / ios / web scripts also exist
+```
+
+## Repository layout
+
+```
+apps/desktop/
+  src/main/        Electron main process, IPC handlers, model state
+  src/preload/     contextBridge API and its type declarations
+  src/renderer/    React UI (components, stores, assets)
+  src/shared/      types shared across processes
+  lib/             SQLite persistence and OCR example
+  constants/       shared UI constants
+  qvac/            QVAC worker bundle and addon manifest
+  qvac.config.json enabled QVAC plugins
+apps/mobile/deskie/ separate Expo app (in progress)
+```
+
+The npm workspace root is still named `kpl` in `package.json`; the product and Electron app are both called Deskie.

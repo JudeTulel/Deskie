@@ -10,6 +10,7 @@ export default function IngestionView() {
   const [scrapeUrl, setScrapeUrl] = useState('')
   const [isScraping, setIsScraping] = useState(false)
   const [scrapeError, setScrapeError] = useState('')
+  const [lastScrapedTitle, setLastScrapedTitle] = useState('')
 
   // Drag state
   const [isDragOver, setIsDragOver] = useState(false)
@@ -58,19 +59,19 @@ export default function IngestionView() {
     if (!scrapeUrl.trim() || !targetSubjectId) return
     setIsScraping(true)
     setScrapeError('')
+    setLastScrapedTitle('')
 
     try {
-      // Scrape Wikipedia or article mock using standard scraping simulation
-      //toDo use real scrapper like selenium
-      await new Promise((r) => setTimeout(r, 1500))
-      
-      const title = 'Article_' + scrapeUrl.split('/').pop()?.substring(0, 20) || 'Scraped_Article'
-      const simulatedText = `Extracted web article contents from ${scrapeUrl}.\n\nThis is a scraped article that has been cleaned, chunked and ingested into the vector database workspace for study purposes.`
-      
-      await ingestText(title, simulatedText, targetSubjectId)
+      // Real fetch + clean in the main process; only the readable text comes back.
+      const { title, text } = await window.qvacAPI.scrapeUrl(scrapeUrl.trim())
+      if (!text.trim()) throw new Error('No readable article text was found on this page.')
+
+      const docTitle = title || 'Scraped_Article'
+      setLastScrapedTitle(docTitle)
+      await ingestText(docTitle, text, targetSubjectId)
       setScrapeUrl('')
     } catch (err) {
-      setScrapeError('Failed to scrape or clean web article.')
+      setScrapeError(err instanceof Error ? err.message : 'Failed to scrape or clean web article.')
     } finally {
       setIsScraping(false)
     }
@@ -175,6 +176,11 @@ export default function IngestionView() {
                     {isScraping ? 'Scraping...' : 'Scrape'}
                   </button>
                 </div>
+                {lastScrapedTitle && (
+                  <p className="text-[10px] text-zinc-400 truncate">
+                    Scraped: <span className="text-white font-semibold">{lastScrapedTitle}</span>
+                  </p>
+                )}
                 {scrapeError && <p className="text-xs text-red-400">{scrapeError}</p>}
                 <p className="text-[10px] text-zinc-500">We scrape the text structure, clean boilerplate scripts, segment, embed, and index it.</p>
               </div>

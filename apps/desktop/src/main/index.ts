@@ -2,6 +2,9 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import * as fs from 'fs'
 import * as path from 'path'
+import * as os from 'os'
+import { randomUUID } from 'crypto'
+import * as cheerio from 'cheerio'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import {
   loadModel,
@@ -84,6 +87,78 @@ async function extractTextFromFile(filePath: string): Promise<string> {
     return result.text
   } else {
     throw new Error(`Unsupported file type for text extraction: ${ext}`)
+  }
+}
+
+const SCRAPE_TIMEOUT_MS = 15000
+const MAX_SCRAPED_TEXT_LENGTH = 20000
+
+// Converts a fetched HTML document into a title and readable article text.
+function extractReadableArticle(html: string): { title: string; text: string } {
+  const $ = cheerio.load(html)
+
+  const title =
+    $('title').first().text().trim() ||
+    $('meta[property="og:title"]').first().attr('content')?.trim() ||
+    $('h1').first().text().trim() ||
+    ''
+
+  // Strip boilerplate before reading text so scripts/styles/navigation don't leak in.
+  $('script, style, nav, footer, header, aside, noscript, template, svg, iframe, form').remove()
+
+  const article = $('article').first()
+  const main = $('main').first()
+  const root = article.length ? article : main.length ? main : $('body')
+
+  // Cheerio's text() concatenates adjacent blocks without separators; add them first.
+  root.find('br').replaceWith('\n')
+  root.find('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, section, tr, td').each((_, el) => {
+    $(el).append('\n')
+  })
+
+  const text = root
+    .text()
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[\t\u00a0 ]+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  return {
+    title: title.slice(0, 300),
+    text: text.slice(0, MAX_SCRAPED_TEXT_LENGTH)
+  }
+}
+
+// Shared transcription flow used by both file-path and recorded-audio IPC calls.
+async function transcribeAudioFile(filePath: string): Promise<{ text: string }> {
+  const models = getModels()
+  const whisperModel: StoredModel | undefined =
+    models.find(m => m.type === 'Speech' && m.isActive) ||
+    models.find(m => m.type === 'Speech')
+
+  const src = whisperModel?.localPath ?? whisperModel?.assetId ?? whisperModel?.assetSrc ??
+    'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin'
+
+  console.log(`[Whisper] Loading speech model: ${src}`)
+  const whisperModelId = await loadModel({
+    modelSrc: src,
+    modelType: 'whisper'
+  })
+
+  try {
+    console.log(`[Whisper] Transcribing: ${filePath}`)
+    const text = await transcribe({
+      modelId: whisperModelId,
+      audioChunk: filePath
+    })
+    saveActivity({ action: `Transcribed audio and generated text.` })
+    return { text }
+  } finally {
+    console.log('[Whisper] Unloading speech model...')
+    await unloadModel({ modelId: whisperModelId })
   }
 }
 
@@ -411,33 +486,74 @@ function setupHandlers(): void {
     return results
   })
 
-  // ── QVAC SDK Audio Transcription Handler ───────────────────────────────────
-  ipcMain.handle('transcribe-audio', async (_event, { filePath, subjectId: _subjectId }) => {
-    const models = getModels()
-    const whisperModel: StoredModel | undefined =
-      models.find(m => m.type === 'Speech' && m.isActive) ||
-      models.find(m => m.type === 'Speech')
+  // ── URL Scraping Handler ────────────────────────────────────────────────────
+  ipcMain.handle('scrape-url', async (_event, rawUrl: string) => {
+    let url: URL
+    try {
+      url = new URL(String(rawUrl ?? '').trim())
+    } catch {
+      throw new Error('Invalid URL. Enter a full http:// or https:// address.')
+    }
 
-    const src = whisperModel?.localPath ?? whisperModel?.assetId ?? whisperModel?.assetSrc ??
-      'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin'
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      throw new Error('Only http and https URLs can be scraped.')
+    }
 
-    console.log(`[Whisper] Loading speech model: ${src}`)
-    const whisperModelId = await loadModel({
-      modelSrc: src,
-      modelType: 'whisper'
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), SCRAPE_TIMEOUT_MS)
 
     try {
-      console.log(`[Whisper] Transcribing: ${filePath}`)
-      const text = await transcribe({
-        modelId: whisperModelId,
-        audioChunk: filePath
+      const response = await fetch(url.toString(), {
+        signal: controller.signal,
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Deskie/1.0 (article scraper)',
+          Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8'
+        }
       })
-      saveActivity({ action: `Transcribed audio and generated text.` })
-      return { text }
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`.trim())
+      }
+
+      const contentType = response.headers.get('content-type') ?? ''
+      if (contentType && !/html|xml|text\//i.test(contentType)) {
+        throw new Error('This URL did not return a web page.')
+      }
+
+      const result = extractReadableArticle(await response.text())
+      if (!result.text) throw new Error('No readable article text was found on this page.')
+
+      console.log(`[SCRAPE] Fetched \"${result.title}\" from ${url.hostname} (${result.text.length} chars)`)
+      return result
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error('The request timed out while scraping this URL.')
+      }
+      if (err instanceof Error) throw new Error(`Failed to scrape URL: ${err.message}`)
+      throw new Error('Failed to scrape URL.')
     } finally {
-      console.log('[Whisper] Unloading speech model...')
-      await unloadModel({ modelId: whisperModelId })
+      clearTimeout(timeout)
+    }
+  })
+
+  // ── QVAC SDK Audio Transcription Handler ───────────────────────────────────
+  ipcMain.handle('transcribe-audio', async (_event, { filePath, subjectId: _subjectId }) =>
+    transcribeAudioFile(filePath)
+  )
+
+  // Live recording: write the captured bytes to a temp WAV, reuse the flow above,
+  // then always remove the temporary file.
+  ipcMain.handle('transcribe-audio-blob', async (_event, audio: ArrayBuffer | Uint8Array) => {
+    if (audio.byteLength === 0) throw new Error('No audio was captured.')
+
+    const filePath = join(os.tmpdir(), `deskie-recording-${randomUUID()}.wav`)
+    try {
+      const bytes = audio instanceof Uint8Array ? audio : new Uint8Array(audio)
+      await fs.promises.writeFile(filePath, bytes)
+      return await transcribeAudioFile(filePath)
+    } finally {
+      await fs.promises.unlink(filePath).catch(() => undefined)
     }
   })
 

@@ -1,69 +1,35 @@
-import React from 'react'
+// Destinations below match routes registered in App.tsx (HashRouter).
+const DESTINATIONS = [
+  { label: 'Dashboard', href: '#/dash', description: 'Recent study activity.' },
+  { label: 'Library', href: '#/library', description: 'Subjects and ingested documents.' },
+  { label: 'Ingestion', href: '#/ingestion', description: 'Add documents, images or audio.' },
+  { label: 'AI chat', href: '#/ai-chat', description: 'Ask questions with citations from your notes.' },
+  { label: 'Flashcards', href: '#/flashcards', description: 'Build and review study cards.' },
+  { label: 'Settings', href: '#/settings', description: 'Manage local models and downloads.' }
+]
 
-const Desk = () => {
-  const cardData = [
-    { title: 'Analytics', description: 'Track user behavior', label: 'Insights', color: '#120F17' },
-    { title: 'Dashboard', description: 'Centralized data view', label: 'Overview', color: '#120F17' },
-    { title: 'Collaboration', description: 'Work together seamlessly', label: 'Teamwork', color: '#120F17' },
-    { title: 'Automation', description: 'Streamline workflows', label: 'Efficiency', color: '#120F17' },
-    { title: 'Integration', description: 'Connect favorite tools', label: 'Connectivity', color: '#120F17' },
-    { title: 'Security', description: 'Enterprise-grade protection', label: 'Protection', color: '#120F17' },
-  ]
-
+/** Compact starting point that points at the app's real sections. */
+export default function Desk(): React.JSX.Element {
   return (
     <div className="min-h-screen p-8 pl-36">
-      <div className=" mx-auto">
-        <h1 className="text-3xl font-bold text-white pb-10">Desk</h1>
-
-        {/* Responsive Bento Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 auto-rows-auto gap-4">
-          {/* Card 1 - Analytics */}
-          <div className="bg-[#120F17] border border-[#2F293A] rounded-2xl p-5 aspect-[4/3] min-h-[200px] flex flex-col justify-between">
-            <div>
-              <span className="text-sm font-medium text-gray-400">Insights</span>
-            </div>
-            <div>
-              <h3 className="text-white text-lg font-semibold mb-1">Analytics</h3>
-              <p className="text-gray-400 text-sm">Track user behavior</p>
-            </div>
-          </div>
-
-          {/* Card 2 - Dashboard */}
-          <div className="bg-[#120F17] border border-[#2F293A] rounded-2xl p-5 aspect-[4/3] min-h-[200px] flex flex-col justify-between">
-            <div>
-              <span className="text-sm font-medium text-gray-400">Overview</span>
-            </div>
-            <div>
-              <h3 className="text-white text-lg font-semibold mb-1">Dashboard</h3>
-              <p className="text-gray-400 text-sm">Centralized data view</p>
-            </div>
-          </div>
-
-          {/* Card 3 - Collaboration (spans 2 cols & 2 rows, height reduced) */}
-          <div className="bg-[#120F17] border border-[#2F293A] rounded-2xl p-5 flex flex-col justify-between lg:col-span-2 lg:row-span-2">
-            <div>
-              <span className="text-sm font-medium text-gray-400">Teamwork</span>
-            </div>
-            <div>
-              <h3 className="text-white text-lg font-semibold mb-1">Collaboration</h3>
-              <p className="text-gray-400 text-sm">Work together seamlessly</p>
-            </div>
-          </div>
-
-          {/* Card 4 - Automation (spans 2 cols, height reduced) */}
-          <div className="bg-white border border-[#2F293A] rounded-2xl p-5 flex flex-col justify-between lg:col-span-2">
-            <div>
-              <span className="text-sm font-medium text-black">Efficiency</span>
-            </div>
-            <div>
-              <h3 className="text-black text-lg font-semibold mb-1">Automation</h3>
-              <p className="text-lblue text-sm">Streamline workflows</p>
-            </div>
-          </div>
+      <div className="mx-auto max-w-5xl">
+        <h1 className="pb-8 text-3xl font-bold text-white">Desk</h1>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {DESTINATIONS.map(({ label, href, description }) => (
+            <a
+              key={href}
+              href={href}
+              className="flex min-h-[160px] flex-col justify-between rounded-2xl border border-[#2F293A] bg-[#120F17] p-5 transition-colors hover:border-indigo-500/60"
+            >
+              <span className="text-sm font-medium text-zinc-500">{label}</span>
+              <span>
+                <span className="mb-1 block text-lg font-semibold text-white">{label}</span>
+                <span className="block text-sm text-zinc-400">{description}</span>
+              </span>
+            </a>
+          ))}
         </div>
       </div>
     </div>
   )
 }
-
-export default Desk

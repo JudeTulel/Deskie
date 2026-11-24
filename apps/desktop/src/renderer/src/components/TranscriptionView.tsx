@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useStudyStore } from '../stores/studyStore'
 
 export default function TranscriptionView() {
-  const { subjects, transcribeLecture, addActivity } = useStudyStore()
+  const { subjects, transcribeLecture, ingestText, addActivity } = useStudyStore()
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
 
   // Recording states
@@ -10,6 +10,7 @@ export default function TranscriptionView() {
   const [isPaused, setIsPaused] = useState(false)
   const [timer, setTimer] = useState(0)
   const [statusText, setStatusText] = useState('Idle')
+  const [transcriptionError, setTranscriptionError] = useState('')
   
   // Audio record chunks
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -69,31 +70,39 @@ export default function TranscriptionView() {
 
       mediaRecorder.onstop = async () => {
         setStatusText('Saving recording data...')
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' })
-        
-        // Save the audio blob locally
-        // For a high fidelity desktop app, we mock writing the temp audio to file and transcribing:
-        setStatusText('Transcribing speech to text...')
-        
-        // Add a mock segment for live feedback, then save transcription
-        setTimeout(() => {
-          setTranscriptSegments(prev => [
-            ...prev,
+        setTranscriptionError('')
+
+        const audioChunks = audioChunksRef.current
+        if (audioChunks.length === 0) {
+          setStatusText('Recording failed - no audio captured.')
+          setTranscriptionError('No audio was captured. Please try recording again.')
+          return
+        }
+
+        try {
+          setStatusText('Transcribing speech to text...')
+          const audioBlob = new Blob(audioChunks, { type: 'audio/wav' })
+          const bytes = await audioBlob.arrayBuffer()
+          const { text } = await window.qvacAPI.transcribeAudioBlob(bytes)
+
+          if (!text || !text.trim()) {
+            throw new Error('The speech model returned no text.')
+          }
+
+          setTranscriptSegments([
             {
               id: Math.random().toString(),
-              speaker: 'Speaker A',
-              text: 'Good morning everyone. Today we are deep diving into the biological structure of cells and cellular division processes.',
-              time: Date.now() - 5000
-            },
-            {
-              id: Math.random().toString(),
-              speaker: 'Speaker B',
-              text: 'Specifically focusing on cellular mitosis stages: prophase, metaphase, anaphase, telophase, and cytokinesis.',
+              speaker: diarizationOn ? 'Speaker A' : 'Speaker',
+              text: text.trim(),
               time: Date.now()
             }
           ])
-          setStatusText('Ingestion complete! Added to subject database.')
-        }, 1500)
+          setStatusText('Transcription complete. Review and ingest below.')
+        } catch (err) {
+          const message = err instanceof Error ? err.message : 'Transcription failed.'
+          setStatusText('Transcription failed.')
+          setTranscriptionError(message)
+        }
       }
 
       // Start recording
@@ -103,6 +112,7 @@ export default function TranscriptionView() {
       setTimer(0)
       setStatusText('Recording Live...')
       setTranscriptSegments([])
+      setTranscriptionError('')
     } catch (err: any) {
       console.error('Mic access failed:', err)
       setStatusText('Permission denied or mic not found.')
@@ -159,14 +169,22 @@ export default function TranscriptionView() {
 
   const handleIngestTranscript = async () => {
     if (!selectedSubjectId || transcriptSegments.length === 0) return
-    
+
     const combinedText = transcriptSegments.map(s => `[${s.speaker}]: ${s.text}`).join('\n')
     const docTitle = `Lecture_Transcript_${new Date().toLocaleDateString().replace(/\//g, '-')}.txt`
-    
-    // Ingest the notes into RAG vector store and SQLite
-    await transcribeLecture(docTitle, selectedSubjectId, (text) => setStatusText(text))
-    addActivity(`Ingested live lecture transcript into subject.`)
-    setTranscriptSegments([])
+
+    setStatusText('Ingesting transcript...')
+    try {
+      // Ingest the (possibly edited) real transcript text into RAG and SQLite.
+      await ingestText(docTitle, combinedText, selectedSubjectId)
+      addActivity(`Ingested live lecture transcript into subject.`)
+      setStatusText('Transcript ingested into subject.')
+      setTranscriptSegments([])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not ingest transcript.'
+      setStatusText('Ingestion failed.')
+      setTranscriptionError(message)
+    }
   }
 
   // Audio file picker transcription
@@ -186,6 +204,7 @@ export default function TranscriptionView() {
   const handleBatchTranscribe = async () => {
     if (!selectedAudioPath || !selectedSubjectId) return
     setStatusText('Transcribing batch audio file...')
+    setTranscriptionError('')
     try {
       const text = await transcribeLecture(selectedAudioPath, selectedSubjectId, (progress) => setStatusText(progress))
       setTranscriptSegments([
@@ -199,6 +218,7 @@ export default function TranscriptionView() {
       setSelectedAudioPath('')
     } catch (err) {
       setStatusText('Batch transcription failed.')
+      setTranscriptionError(err instanceof Error ? err.message : 'Batch transcription failed.')
     }
   }
 
@@ -251,6 +271,11 @@ export default function TranscriptionView() {
             <div className="text-xs text-zinc-500 font-mono">
               Status: <span className="text-indigo-400 font-bold">{statusText}</span>
             </div>
+            {transcriptionError && (
+              <p className="text-xs text-red-400 text-center max-w-sm" role="alert">
+                {transcriptionError}
+              </p>
+            )}
 
             {/* Controls */}
             <div className="flex gap-4">

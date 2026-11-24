@@ -68,9 +68,15 @@ contextBridge.exposeInMainWorld('qvacAPI', {
   ragSearch: (params: { query: string; subjectId?: string; topK?: number }): Promise<any[]> =>
     ipcRenderer.invoke('rag-search', params),
 
+  // URL Scraping
+  scrapeUrl: (url: string): Promise<{ title: string; text: string }> =>
+    ipcRenderer.invoke('scrape-url', url),
+
   // Audio Transcription
   transcribeAudio: (params: { filePath: string; subjectId?: string }): Promise<{ text: string }> =>
     ipcRenderer.invoke('transcribe-audio', params),
+  transcribeAudioBlob: (audio: ArrayBuffer | Uint8Array): Promise<{ text: string }> =>
+    ipcRenderer.invoke('transcribe-audio-blob', audio),
 
   // Model download
   downloadModel: (

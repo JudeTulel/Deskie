@@ -1,10 +1,15 @@
+import { useEffect } from 'react'
 import rec1 from "../assets/images/rec1.png"
 import rec2 from "../assets/images/rec2.png"
 import rec3 from "../assets/images/rec3.png"
+import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin'
 import gsap from "gsap"
 
+gsap.registerPlugin(ScrambleTextPlugin)
+
 export function Hero() {
-   gsap.to(".title", {
+  useEffect(() => {
+    const tween = gsap.to(".title", {
       duration: 2.5,
       scrambleText: {
         text: "smarter",
@@ -18,7 +23,10 @@ export function Hero() {
       overwrite: "auto",
       repeat: -1,
       repeatDelay: 3,
-    });
+    })
+    return () => { tween.kill() }
+  }, [])
+
   return (
     <section id="hero" className="relative z-10 min-h-screen w-full">
       {/* Centered container */}

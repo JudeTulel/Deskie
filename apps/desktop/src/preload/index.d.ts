@@ -56,8 +56,12 @@ declare global {
       ragIngest: (params: { filePath?: string; text?: string; subjectId?: string; docName?: string }) => Promise<{ success: boolean; document: Document }>
       ragSearch: (params: { query: string; subjectId?: string; topK?: number }) => Promise<any[]>
 
+      // URL Scraping
+      scrapeUrl: (url: string) => Promise<{ title: string; text: string }>
+
       // Audio Transcription
       transcribeAudio: (params: { filePath: string; subjectId?: string }) => Promise<{ text: string }>
+      transcribeAudioBlob: (audio: ArrayBuffer | Uint8Array) => Promise<{ text: string }>
       downloadModel: (
         assetSrc: string,
         downloadId: string,

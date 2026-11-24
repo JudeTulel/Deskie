@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  desktop:
+    name: Desktop — typecheck, test, build
+    runs-on: ubuntu-latest
+    env:
+      # npm 12 blocks git-sourced dependencies unless explicitly allowed, and
+      # electron's postinstall (install-app-deps) shells out to npm as well.
+      NPM_CONFIG_ALLOW_GIT: all
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: apps/desktop
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: apps/desktop
+        run: npm test
+
+      - name: Build
+        working-directory: apps/desktop
+        run: npm run build
